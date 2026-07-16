@@ -3,3 +3,4 @@ export * from './shared/index';
 export * from './listings/index';
 export * from './admin/index';
 export * from './search/index';
+export * from './media/index';

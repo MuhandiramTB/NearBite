@@ -197,6 +197,39 @@ drop policy if exists audit_insert on admin_action_log;
 create policy audit_insert on admin_action_log for insert with check (is_admin());
 
 -- ---------------------------------------------------------------------------
+-- Storage bucket policies (business-photos). RLS on the DB photos table
+-- protects metadata; these protect the actual files. Path = {business_id}/...
+-- Public READ (listings are public); WRITE only by owner-of-that-business/admin.
+-- ---------------------------------------------------------------------------
+drop policy if exists storage_read on storage.objects;
+create policy storage_read on storage.objects for select
+  using (bucket_id = 'business-photos');
+
+drop policy if exists storage_write on storage.objects;
+create policy storage_write on storage.objects for insert
+  with check (
+    bucket_id = 'business-photos'
+    and exists (select 1 from businesses b
+                where b.id = (storage.foldername(name))[1]::uuid
+                  and (b.owner_id = auth.uid() or is_admin())));
+
+drop policy if exists storage_update on storage.objects;
+create policy storage_update on storage.objects for update
+  using (
+    bucket_id = 'business-photos'
+    and exists (select 1 from businesses b
+                where b.id = (storage.foldername(name))[1]::uuid
+                  and (b.owner_id = auth.uid() or is_admin())));
+
+drop policy if exists storage_delete on storage.objects;
+create policy storage_delete on storage.objects for delete
+  using (
+    bucket_id = 'business-photos'
+    and exists (select 1 from businesses b
+                where b.id = (storage.foldername(name))[1]::uuid
+                  and (b.owner_id = auth.uid() or is_admin())));
+
+-- ---------------------------------------------------------------------------
 -- Triggers (enforce what RLS can't express — foundation §8)
 -- ---------------------------------------------------------------------------
 -- 8a. status is admin-only (closes owner self-approve gap)

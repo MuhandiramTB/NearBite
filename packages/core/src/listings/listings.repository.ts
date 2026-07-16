@@ -49,6 +49,19 @@ export class ListingsRepository {
     return data ?? null;
   }
 
+  async setLiveStatus(id: string, live: 'open' | 'closed' | 'busy') {
+    // The freshness trigger stamps last_owner_update_at on this update.
+    const { data, error } = await this.db
+      .from('businesses')
+      .update({ live })
+      .eq('id', id)
+      .select('id,live')
+      .maybeSingle();
+    if (error) throw Errors.validation(error.message);
+    if (!data) throw Errors.notFound('Listing not found');
+    return data as { id: string; live: string };
+  }
+
   async update(id: string, input: UpdateBusiness): Promise<{ id: string; status: string }> {
     const patch: Record<string, unknown> = { status: 'pending' };
     if (input.name !== undefined) patch.name = input.name;

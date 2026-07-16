@@ -1,4 +1,4 @@
-import type { CreateBusiness, UpdateBusiness } from '@nearbite/contracts';
+import type { CreateBusiness, SetLiveStatus, UpdateBusiness } from '@nearbite/contracts';
 import type { Actor } from '../shared/auth';
 import { requireOwner } from '../shared/auth';
 import { Errors } from '../shared/errors';
@@ -23,6 +23,13 @@ export class ListingsService {
   async listMine(actor: Actor) {
     requireOwner(actor);
     return this.repo.findByOwner(actor.userId as string);
+  }
+
+  async setLiveStatus(actor: Actor, id: string, input: SetLiveStatus) {
+    requireOwner(actor);
+    const owned = await this.repo.findOwnedById(actor.userId as string, id);
+    if (!owned) throw Errors.notFound('Listing not found');
+    return this.repo.setLiveStatus(id, input.live);
   }
 
   async updateListing(actor: Actor, id: string, input: UpdateBusiness) {
