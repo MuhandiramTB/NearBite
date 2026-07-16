@@ -3,7 +3,7 @@
 import { use, useCallback, useEffect, useState } from 'react';
 import { apiGet, apiSend } from '@/lib/ui/api-client';
 import { attrLabel, cuisineEmoji, freshness, liveLabel, priceTier } from '@/lib/ui/format';
-import { useSession } from '@/lib/ui/use-session';
+import { useAuthGate } from '@/lib/auth/auth-gate';
 
 type Detail = {
   id: string;
@@ -42,7 +42,7 @@ type Review = {
 
 export default function DetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
-  const session = useSession();
+  const { requireAuth } = useAuthGate();
   const [d, setD] = useState<Detail | null>(null);
   const [error, setError] = useState('');
   const [faved, setFaved] = useState(false);
@@ -57,13 +57,15 @@ export default function DetailPage({ params }: { params: Promise<{ id: string }>
     loadDetail();
   }, [loadDetail]);
 
-  async function toggleFav() {
-    try {
-      await apiSend(faved ? 'DELETE' : 'PUT', `/businesses/${id}/favorite`);
-      setFaved(!faved);
-    } catch (e) {
-      setError(String((e as Error).message));
-    }
+  function toggleFav() {
+    requireAuth(async () => {
+      try {
+        await apiSend(faved ? 'DELETE' : 'PUT', `/businesses/${id}/favorite`);
+        setFaved(!faved);
+      } catch (e) {
+        setError(String((e as Error).message));
+      }
+    });
   }
 
   if (error) return <p className="error">{error}</p>;
@@ -104,11 +106,9 @@ export default function DetailPage({ params }: { params: Promise<{ id: string }>
         <div className="row between">
           <h1 className="h1" style={{ fontSize: 32 }}>{d.name}</h1>
           <div className="row">
-            {session.userId && (
-              <button className="btn btn-sm" onClick={toggleFav}>
-                {faved ? '★ Saved' : '☆ Save'}
-              </button>
-            )}
+            <button className="btn btn-sm" onClick={toggleFav}>
+              {faved ? '★ Saved' : '☆ Save'}
+            </button>
             <span className={`live live-${d.live}`}>{liveLabel[d.live]}</span>
           </div>
         </div>
@@ -243,7 +243,7 @@ export default function DetailPage({ params }: { params: Promise<{ id: string }>
         </div>
       )}
 
-      <Reviews businessId={id} canReview={!!session.userId} onPosted={loadDetail} />
+      <Reviews businessId={id} onPosted={loadDetail} requireAuth={requireAuth} />
     </div>
   );
 }
@@ -259,12 +259,12 @@ function Stars({ n }: { n: number }) {
 
 function Reviews({
   businessId,
-  canReview,
   onPosted,
+  requireAuth,
 }: {
   businessId: string;
-  canReview: boolean;
   onPosted: () => void;
+  requireAuth: (fn: () => void) => void;
 }) {
   const [reviews, setReviews] = useState<Review[]>([]);
   const [rating, setRating] = useState(5);
@@ -283,26 +283,28 @@ function Reviews({
     load();
   }, [load]);
 
-  async function submit() {
-    setBusy(true);
-    setErr('');
-    try {
-      await apiSend('POST', `/businesses/${businessId}/reviews`, {
-        rating,
-        body: body || undefined,
-        ratingFood: subs.food || undefined,
-        ratingService: subs.service || undefined,
-        ratingValue: subs.value || undefined,
-        ratingCleanliness: subs.cleanliness || undefined,
-      });
-      setBody('');
-      load();
-      onPosted();
-    } catch (e) {
-      setErr(String((e as Error).message));
-    } finally {
-      setBusy(false);
-    }
+  function submit() {
+    requireAuth(async () => {
+      setBusy(true);
+      setErr('');
+      try {
+        await apiSend('POST', `/businesses/${businessId}/reviews`, {
+          rating,
+          body: body || undefined,
+          ratingFood: subs.food || undefined,
+          ratingService: subs.service || undefined,
+          ratingValue: subs.value || undefined,
+          ratingCleanliness: subs.cleanliness || undefined,
+        });
+        setBody('');
+        load();
+        onPosted();
+      } catch (e) {
+        setErr(String((e as Error).message));
+      } finally {
+        setBusy(false);
+      }
+    });
   }
 
   return (
@@ -311,8 +313,7 @@ function Reviews({
         Reviews {reviews.length > 0 && <span className="muted">({reviews.length})</span>}
       </h2>
 
-      {canReview ? (
-        <div className="panel stack" style={{ marginBottom: 16 }}>
+      <div className="panel stack" style={{ marginBottom: 16 }}>
           <div className="row">
             <span className="label" style={{ margin: 0 }}>Your rating</span>
             {[1, 2, 3, 4, 5].map((n) => (
@@ -365,11 +366,6 @@ function Reviews({
           </div>
           {err && <p className="error">{err}</p>}
         </div>
-      ) : (
-        <p className="muted" style={{ marginBottom: 16 }}>
-          <a href="/signin" style={{ color: 'var(--brand)' }}>Sign in</a> to leave a review.
-        </p>
-      )}
 
       {reviews.length === 0 ? (
         <p className="muted">No reviews yet. Be the first.</p>

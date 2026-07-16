@@ -54,13 +54,15 @@ export default function AdminPage() {
   }
 
   if (session.loading) return <p className="muted">Loading…</p>;
-  if (!session.userId)
+  // Unauthorized users cannot access admin pages (spec §7).
+  if (!session.userId || session.role !== 'admin')
     return (
-      <div className="stack">
-        <h1 className="h1">Admin</h1>
-        <p>
-          Please <a href="/signin" style={{ color: 'var(--brand)' }}>sign in</a> as an admin.
-        </p>
+      <div className="stack" style={{ maxWidth: 420 }}>
+        <h1 className="h1">Restricted</h1>
+        <p className="muted">This area is for administrators.</p>
+        <a className="btn btn-primary" href="/admin/login" style={{ alignSelf: 'flex-start' }}>
+          Go to admin sign in
+        </a>
       </div>
     );
 

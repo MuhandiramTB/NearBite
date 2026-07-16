@@ -66,6 +66,9 @@ function NotificationBell() {
 
 export function Nav() {
   const { lang, setLang, t } = useI18n();
+  const session = useSession();
+  const isAdmin = session.role === 'admin';
+  const isOwner = session.role === 'owner' || isAdmin;
   return (
     <nav className="nav">
       <div className="container nav-inner">
@@ -73,9 +76,10 @@ export function Nav() {
           Near<span>Bite</span>
         </a>
         <a href="/">{t('nav.discover')}</a>
-        <a href="/owner">{t('nav.myBusiness')}</a>
-        <a href="/admin">{t('nav.admin')}</a>
-        <a href="/signin">{t('nav.signin')}</a>
+        {isOwner && <a href="/owner">{t('nav.myBusiness')}</a>}
+        {/* Admin is intentionally NOT in public nav (spec §7); reachable via /admin/login */}
+        {isAdmin && <a href="/admin">{t('nav.admin')}</a>}
+        {!session.userId && <a href="/signin">{t('nav.signin')}</a>}
         <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 12 }}>
           <NotificationBell />
         </div>
