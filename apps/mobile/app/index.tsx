@@ -1,84 +1,162 @@
-import { useState } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import {
+  ActivityIndicator,
+  FlatList,
+  Pressable,
+  RefreshControl,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { supabase } from '@/lib/supabase';
+import { Link } from 'expo-router';
+import { type Card, distanceLabel, freshness, getPilotCityId, search } from '@/lib/data';
 
-/**
- * M0 auth screen: email OTP (magic link / code) sign-in via Supabase.
- * Proves the mobile client authenticates against the same backend as web.
- * Browsing is anonymous (no login required, FR-3.1); login is only needed
- * later to review/save — this screen is the entry point for that path.
- */
-export default function AuthScreen() {
+const LIVE_COLORS: Record<string, string> = { open: '#1f9d55', busy: '#d9822b', closed: '#9a8d80' };
+
+export default function SearchScreen() {
   const insets = useSafeAreaInsets();
-  const [email, setEmail] = useState('');
-  const [status, setStatus] = useState<'idle' | 'sending' | 'sent' | 'error'>('idle');
-  const [message, setMessage] = useState('');
+  const [cityId, setCityId] = useState<string | null>(null);
+  const [q, setQ] = useState('');
+  const [vegOnly, setVegOnly] = useState(false);
+  const [items, setItems] = useState<Card[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
 
-  async function sendOtp() {
-    setStatus('sending');
-    const { error } = await supabase.auth.signInWithOtp({ email });
-    if (error) {
-      setStatus('error');
-      setMessage(error.message);
-    } else {
-      setStatus('sent');
-      setMessage('Check your email for the sign-in link.');
+  // Read latest filter values without making `run` change identity every keystroke.
+  const filters = { q, vegOnly };
+  const filtersRef = useRef(filters);
+  filtersRef.current = filters;
+
+  const run = useCallback(async (city: string) => {
+    setLoading(true);
+    setError('');
+    try {
+      const { q: cq, vegOnly: cv } = filtersRef.current;
+      setItems(await search(city, { q: cq || undefined, vegOnly: cv }));
+    } catch (e) {
+      setError(String((e as Error).message));
+    } finally {
+      setLoading(false);
     }
-  }
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+    getPilotCityId().then((id) => {
+      if (!active) return;
+      setCityId(id);
+      if (id) run(id);
+    });
+    return () => {
+      active = false;
+    };
+  }, [run]);
 
   return (
-    <View style={[styles.container, { paddingTop: insets.top + 48 }]}>
+    <View style={[styles.container, { paddingTop: insets.top + 12 }]}>
       <Text style={styles.title}>NearBite</Text>
-      <Text style={styles.subtitle}>Sign in to review & save favorites</Text>
+      <Text style={styles.subtitle}>Fresh menus, real photos, live status.</Text>
 
       <TextInput
         style={styles.input}
-        placeholder="you@example.com"
-        autoCapitalize="none"
-        keyboardType="email-address"
-        value={email}
-        onChangeText={setEmail}
+        placeholder="Search a dish or place…"
+        value={q}
+        onChangeText={setQ}
+        onSubmitEditing={() => cityId && run(cityId)}
+        returnKeyType="search"
       />
+      <View style={styles.filterRow}>
+        <Pressable
+          style={[styles.chip, vegOnly && styles.chipOn]}
+          onPress={() => {
+            const v = !vegOnly;
+            setVegOnly(v);
+            if (cityId) setTimeout(() => run(cityId), 0);
+          }}
+        >
+          <Text style={[styles.chipText, vegOnly && styles.chipTextOn]}>🌱 Veg</Text>
+        </Pressable>
+        <Link href="/signin" asChild>
+          <Pressable style={styles.chip}>
+            <Text style={styles.chipText}>Sign in</Text>
+          </Pressable>
+        </Link>
+      </View>
 
-      <Pressable
-        style={styles.button}
-        onPress={sendOtp}
-        disabled={status === 'sending' || email.length < 3}
-      >
-        {status === 'sending' ? (
-          <ActivityIndicator color="#fff" />
-        ) : (
-          <Text style={styles.buttonText}>Send sign-in link</Text>
-        )}
-      </Pressable>
+      {error ? <Text style={styles.error}>{error}</Text> : null}
 
-      {message ? (
-        <Text style={[styles.message, status === 'error' && styles.error]}>{message}</Text>
-      ) : null}
+      {loading && items.length === 0 ? (
+        <ActivityIndicator style={{ marginTop: 40 }} />
+      ) : (
+        <FlatList
+          data={items}
+          keyExtractor={(b) => b.id}
+          contentContainerStyle={{ paddingBottom: insets.bottom + 24 }}
+          refreshControl={
+            <RefreshControl refreshing={loading} onRefresh={() => cityId && run(cityId)} />
+          }
+          ListEmptyComponent={<Text style={styles.empty}>No places found. Try another search.</Text>}
+          renderItem={({ item: b }) => (
+            <Link href={{ pathname: '/b/[id]', params: { id: b.id } }} asChild>
+              <Pressable style={styles.card}>
+                <View style={styles.cardTop}>
+                  <Text style={styles.cardTitle}>{b.name}</Text>
+                  <View style={[styles.liveDot, { backgroundColor: LIVE_COLORS[b.live] }]} />
+                </View>
+                <Text style={styles.meta}>
+                  {b.category_slug ?? 'food'} · {'$'.repeat(b.price_tier)} ·{' '}
+                  {distanceLabel(b.distance_m)}
+                  {b.review_count > 0 ? ` · ★ ${b.avg_rating}` : ''}
+                </Text>
+                <Text style={styles.fresh}>✦ Updated {freshness(b.last_updated_at)}</Text>
+              </Pressable>
+            </Link>
+          )}
+        />
+      )}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, paddingHorizontal: 24, backgroundColor: '#fff' },
-  title: { fontSize: 34, fontWeight: '800' },
-  subtitle: { fontSize: 16, color: '#666', marginTop: 4, marginBottom: 32 },
+  container: { flex: 1, paddingHorizontal: 18, backgroundColor: '#fbf7f2' },
+  title: { fontSize: 30, fontWeight: '800', color: '#211915', letterSpacing: -0.5 },
+  subtitle: { color: '#8c7d70', marginBottom: 14 },
   input: {
     borderWidth: 1,
-    borderColor: '#ddd',
+    borderColor: '#e9ddce',
+    backgroundColor: '#fff',
     borderRadius: 12,
-    padding: 16,
-    fontSize: 16,
-    marginBottom: 16,
+    padding: 14,
+    fontSize: 15,
   },
-  button: {
-    backgroundColor: '#111',
-    borderRadius: 12,
-    padding: 16,
-    alignItems: 'center',
+  filterRow: { flexDirection: 'row', gap: 8, marginTop: 10, marginBottom: 8 },
+  chip: {
+    borderWidth: 1,
+    borderColor: '#e9ddce',
+    borderRadius: 999,
+    paddingVertical: 7,
+    paddingHorizontal: 14,
+    backgroundColor: '#fff',
   },
-  buttonText: { color: '#fff', fontSize: 16, fontWeight: '600' },
-  message: { marginTop: 16, color: '#333' },
-  error: { color: '#c00' },
+  chipOn: { backgroundColor: '#d6482b', borderColor: '#d6482b' },
+  chipText: { fontWeight: '600', color: '#4b3f37' },
+  chipTextOn: { color: '#fff' },
+  card: {
+    backgroundColor: '#fff',
+    borderWidth: 1,
+    borderColor: '#e9ddce',
+    borderRadius: 14,
+    padding: 14,
+    marginTop: 12,
+  },
+  cardTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  cardTitle: { fontSize: 16, fontWeight: '700', color: '#211915', flex: 1 },
+  liveDot: { width: 10, height: 10, borderRadius: 5, marginLeft: 8 },
+  meta: { color: '#8c7d70', marginTop: 4, fontSize: 13 },
+  fresh: { color: '#e0902b', marginTop: 6, fontSize: 12, fontWeight: '600' },
+  empty: { textAlign: 'center', color: '#8c7d70', marginTop: 40 },
+  error: { color: '#d6482b', marginVertical: 8 },
 });
