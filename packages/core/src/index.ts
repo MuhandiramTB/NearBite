@@ -2,3 +2,4 @@
 export * from './shared/index';
 export * from './listings/index';
 export * from './admin/index';
+export * from './search/index';

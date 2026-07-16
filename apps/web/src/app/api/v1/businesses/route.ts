@@ -1,9 +1,25 @@
 import type { NextRequest } from 'next/server';
-import { CreateBusiness } from '@nearbite/contracts';
-import { ListingsRepository, ListingsService } from '@nearbite/core';
+import { CreateBusiness, SearchQuery } from '@nearbite/contracts';
+import {
+  ListingsRepository,
+  ListingsService,
+  SearchRepository,
+  SearchService,
+} from '@nearbite/core';
 import { handle } from '@/lib/api/respond';
 import { resolveActor } from '@/lib/api/actor';
 import { getRequestDb } from '@/lib/api/db';
+
+/** GET /api/v1/businesses — anonymous geo search + filter. FR-3.1..3.7. */
+export async function GET(req: NextRequest) {
+  return handle(async () => {
+    const params = Object.fromEntries(req.nextUrl.searchParams);
+    const query = SearchQuery.parse(params);
+    const db = await getRequestDb();
+    const service = new SearchService(new SearchRepository(db));
+    return service.search(query);
+  });
+}
 
 /** POST /api/v1/businesses — owner creates a listing (→ pending). FR-1.1/1.2. */
 export async function POST(req: NextRequest) {

@@ -250,6 +250,92 @@ begin
   return new_id;
 end $$;
 
+-- search_businesses: the core discovery query (FR-3.1..3.7).
+-- Geo radius via ST_DWithin (uses the GiST index), plus optional filters and
+-- sort. SECURITY INVOKER so RLS still restricts to approved listings for anon.
+-- Cursor pagination is offset-based here for MVP simplicity (small pilot data).
+create or replace function search_businesses(
+  p_lat double precision, p_lng double precision,
+  p_radius_m double precision, p_city_id uuid,
+  p_q text default null, p_category_id uuid default null,
+  p_max_price_tier smallint default null, p_veg_only boolean default false,
+  p_open_now boolean default false,
+  p_sort text default 'distance', p_limit int default 20, p_offset int default 0
+) returns table (
+  id uuid, name text, category_slug text, price_tier smallint,
+  avg_rating numeric, review_count int, live live_status,
+  distance_m double precision, thumbnail_path text, last_updated_at timestamptz
+)
+language sql stable security invoker set search_path = public, extensions as $$
+  with origin as (
+    select ST_SetSRID(ST_MakePoint(p_lng, p_lat), 4326)::geography as g
+  )
+  select
+    b.id, b.name, c.slug as category_slug, b.price_tier,
+    b.avg_rating, b.review_count, b.live,
+    ST_Distance(b.location, o.g) as distance_m,
+    (select p.storage_path from photos p
+       where p.business_id = b.id order by p.created_at limit 1) as thumbnail_path,
+    coalesce(b.last_owner_update_at, b.updated_at) as last_updated_at
+  from businesses b
+  cross join origin o
+  left join categories c on c.id = b.category_id
+  where b.status = 'approved'
+    and b.city_id = p_city_id
+    and ST_DWithin(b.location, o.g, p_radius_m)
+    and (p_category_id is null or b.category_id = p_category_id)
+    and (p_max_price_tier is null or b.price_tier <= p_max_price_tier)
+    and (p_veg_only is false or b.is_veg_friendly = true)
+    and (p_open_now is false or b.live = 'open')
+    and (
+      p_q is null
+      or b.name ilike '%' || p_q || '%'
+      or exists (select 1 from menu_items mi
+                 where mi.business_id = b.id and mi.name ilike '%' || p_q || '%')
+    )
+  order by
+    case when p_sort = 'rating' then b.avg_rating end desc nulls last,
+    case when p_sort = 'price'  then b.price_tier end asc  nulls last,
+    ST_Distance(b.location, o.g) asc
+  limit p_limit offset p_offset;
+$$;
+
+-- business_detail: full listing page as one JSON object (FR-3.4). SECURITY
+-- INVOKER so a non-approved listing is invisible to anon (returns null).
+create or replace function business_detail(p_id uuid)
+returns jsonb
+language sql stable security invoker set search_path = public, extensions as $$
+  select case when b.id is null then null else jsonb_build_object(
+    'id', b.id, 'name', b.name,
+    'categorySlug', c.slug, 'priceTier', b.price_tier,
+    'avgRating', b.avg_rating, 'reviewCount', b.review_count, 'live', b.live,
+    'description', b.description, 'descriptionLang', b.description_lang,
+    'address', b.address,
+    'lat', ST_Y(b.location::geometry), 'lng', ST_X(b.location::geometry),
+    'phone', b.phone, 'isVegFriendly', b.is_veg_friendly,
+    'lastUpdatedAt', coalesce(b.last_owner_update_at, b.updated_at),
+    'hours', coalesce((select jsonb_agg(jsonb_build_object(
+        'weekday', h.weekday, 'open', h.open_time, 'close', h.close_time,
+        'isClosed', h.is_closed) order by h.weekday)
+      from business_hours h where h.business_id = b.id), '[]'::jsonb),
+    'menu', coalesce((select jsonb_agg(jsonb_build_object(
+        'id', mi.id, 'name', mi.name, 'price', mi.price, 'currency', mi.currency,
+        'isVeg', mi.is_veg, 'section', mi.section) order by mi.sort_order)
+      from menu_items mi where mi.business_id = b.id), '[]'::jsonb),
+    'photos', coalesce((select jsonb_agg(jsonb_build_object(
+        'id', p.id, 'storagePath', p.storage_path, 'kind', p.kind) order by p.created_at)
+      from photos p where p.business_id = b.id), '[]'::jsonb),
+    'offers', coalesce((select jsonb_agg(jsonb_build_object(
+        'id', o.id, 'title', o.title, 'description', o.description,
+        'startsAt', o.starts_at, 'endsAt', o.ends_at))
+      from offers o where o.business_id = b.id
+        and o.is_active and o.ends_at > now()), '[]'::jsonb)
+  ) end
+  from businesses b
+  left join categories c on c.id = b.category_id
+  where b.id = p_id;
+$$;
+
 -- 8c. keep avg_rating / review_count correct
 create or replace function recompute_rating() returns trigger
 language plpgsql set search_path = public as $$
