@@ -25,3 +25,16 @@ export const liveLabel: Record<string, string> = {
   busy: 'Busy',
   closed: 'Closed',
 };
+
+/** Emoji used for the gradient placeholder when a listing has no photo. */
+export function cuisineEmoji(slug: string | null | undefined): string {
+  const map: Record<string, string> = {
+    'sri-lankan': '🍛',
+    cafe: '☕',
+    chinese: '🥡',
+    indian: '🍲',
+    bakery: '🥐',
+    'fast-food': '🍔',
+  };
+  return (slug && map[slug]) || '🍽️';
+}

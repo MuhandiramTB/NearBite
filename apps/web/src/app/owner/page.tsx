@@ -75,10 +75,10 @@ export default function OwnerPage() {
         <span className="muted" style={{ fontSize: 13 }}>{session.email}</span>
       </div>
 
-      {error && <p style={{ color: 'var(--danger)' }}>{error}</p>}
-      {notice && <p style={{ color: 'var(--ok)' }}>{notice}</p>}
+      {error && <p style={{ color: 'var(--brand)' }}>{error}</p>}
+      {notice && <p style={{ color: 'var(--open)' }}>{notice}</p>}
 
-      <div className="card">
+      <div className="panel">
         <p className="muted" style={{ marginTop: 0 }}>
           New here? Register as a business owner to create listings.
         </p>
@@ -149,7 +149,7 @@ function CreateListing({
   }
 
   return (
-    <div className="card stack">
+    <div className="panel stack">
       <strong>Create a listing</strong>
       <input className="input" placeholder="Business name" value={name} onChange={(e) => setName(e.target.value)} />
       <div className="row">
@@ -203,13 +203,13 @@ function ListingRow({
   }
 
   return (
-    <div className="card">
+    <div className="panel">
       <div className="row" style={{ justifyContent: 'space-between' }}>
         <strong>{b.name}</strong>
         <span className={`badge badge-${b.status}`}>{b.status}</span>
       </div>
       {b.status === 'rejected' && b.rejection_reason && (
-        <p style={{ color: 'var(--danger)', fontSize: 13 }}>Reason: {b.rejection_reason}</p>
+        <p style={{ color: 'var(--brand)', fontSize: 13 }}>Reason: {b.rejection_reason}</p>
       )}
       <div className="row" style={{ marginTop: 8, justifyContent: 'space-between' }}>
         <div className="row">

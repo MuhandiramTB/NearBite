@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { apiGet } from '@/lib/ui/api-client';
-import { distance, freshness, liveLabel, priceTier } from '@/lib/ui/format';
+import { cuisineEmoji, distance, freshness, liveLabel, priceTier } from '@/lib/ui/format';
 
 type Card = {
   id: string;
@@ -19,8 +19,7 @@ type Card = {
 type Category = { id: string; slug: string; i18n: { en: string } };
 type City = { id: string };
 
-// Colombo Fort default (pilot). Real app uses geolocation.
-const DEFAULT = { lat: 6.9344, lng: 79.8428 };
+const DEFAULT = { lat: 6.9344, lng: 79.8428 }; // Colombo Fort (pilot)
 
 export default function HomePage() {
   const [cats, setCats] = useState<Category[]>([]);
@@ -31,7 +30,7 @@ export default function HomePage() {
   const [openNow, setOpenNow] = useState(false);
   const [q, setQ] = useState('');
   const [results, setResults] = useState<Card[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
   useEffect(() => {
@@ -41,8 +40,7 @@ export default function HomePage() {
     ])
       .then(([c, k]) => {
         setCats(k.data);
-        const first = c.data[0];
-        if (first) setCityId(first.id);
+        if (c.data[0]) setCityId(c.data[0].id);
       })
       .catch((e) => setError(String(e.message)));
   }, []);
@@ -78,22 +76,35 @@ export default function HomePage() {
   }, [cityId, runSearch]);
 
   return (
-    <div className="stack">
-      <div>
-        <h1 className="h1">Find where to eat</h1>
-        <p className="muted">Accurate menus, real photos, live status — kept fresh by the owners.</p>
-      </div>
+    <div className="stack" style={{ gap: 4 }}>
+      <section className="hero">
+        <p className="eyebrow">Colombo pilot</p>
+        <h1 className="h1">Find where to eat — with menus you can trust.</h1>
+        <p className="lead" style={{ marginTop: 10 }}>
+          Real prices, real photos, live open/busy status — kept fresh by the owners themselves, not
+          stale listings.
+        </p>
 
-      <div className="card stack">
-        <input
-          className="input"
-          placeholder="Search dish or place…"
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-          onKeyDown={(e) => e.key === 'Enter' && runSearch()}
-        />
-        <div className="row">
-          <select className="select" style={{ maxWidth: 180 }} value={category} onChange={(e) => setCategory(e.target.value)}>
+        <div className="searchbar">
+          <input
+            className="input search-input"
+            placeholder="Search a dish or place — “kottu”, “cafe”…"
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && runSearch()}
+          />
+          <button className="btn btn-primary" onClick={runSearch} disabled={loading}>
+            {loading ? 'Searching…' : 'Search'}
+          </button>
+        </div>
+
+        <div className="filterbar">
+          <select
+            className="select"
+            style={{ maxWidth: 180 }}
+            value={category}
+            onChange={(e) => setCategory(e.target.value)}
+          >
             <option value="">All cuisines</option>
             {cats.map((c) => (
               <option key={c.id} value={c.id}>
@@ -101,46 +112,73 @@ export default function HomePage() {
               </option>
             ))}
           </select>
-          <select className="select" style={{ maxWidth: 140 }} value={maxPrice} onChange={(e) => setMaxPrice(e.target.value)}>
+          <select
+            className="select"
+            style={{ maxWidth: 150 }}
+            value={maxPrice}
+            onChange={(e) => setMaxPrice(e.target.value)}
+          >
             <option value="">Any price</option>
             <option value="1">$ or less</option>
             <option value="2">$$ or less</option>
             <option value="3">$$$ or less</option>
           </select>
-          <label className="row" style={{ gap: 4 }}>
-            <input type="checkbox" checked={vegOnly} onChange={(e) => setVegOnly(e.target.checked)} /> Veg
+          <label className="check">
+            <input type="checkbox" checked={vegOnly} onChange={(e) => setVegOnly(e.target.checked)} />
+            Veg
           </label>
-          <label className="row" style={{ gap: 4 }}>
-            <input type="checkbox" checked={openNow} onChange={(e) => setOpenNow(e.target.checked)} /> Open now
+          <label className="check">
+            <input type="checkbox" checked={openNow} onChange={(e) => setOpenNow(e.target.checked)} />
+            Open now
           </label>
-          <button className="btn btn-primary" onClick={runSearch} disabled={loading}>
-            {loading ? 'Searching…' : 'Search'}
-          </button>
         </div>
-      </div>
+      </section>
 
-      {error && <p style={{ color: 'var(--danger)' }}>{error}</p>}
+      {error && <p className="error" style={{ marginTop: 20 }}>{error}</p>}
 
-      <div className="grid grid-2">
-        {results.map((b) => (
-          <a key={b.id} href={`/b/${b.id}`} className="card" style={{ display: 'block' }}>
-            <div className="row" style={{ justifyContent: 'space-between' }}>
-              <strong>{b.name}</strong>
-              <span className={`badge badge-${b.live}`}>{liveLabel[b.live]}</span>
-            </div>
-            <div className="row muted" style={{ fontSize: 13, marginTop: 4 }}>
-              <span>{b.categorySlug ?? '—'}</span>
-              <span>· {priceTier(b.priceTier)}</span>
-              <span>· {distance(b.distanceM)}</span>
-              {b.reviewCount > 0 && <span>· ★ {b.avgRating}</span>}
-            </div>
-            <div className="badge" style={{ marginTop: 8 }}>
-              Updated {freshness(b.lastUpdatedAt)}
-            </div>
-          </a>
-        ))}
+      <div className="results">
+        {loading &&
+          results.length === 0 &&
+          Array.from({ length: 6 }).map((_, i) => <div key={i} className="skel skel-card" />)}
+
+        {!loading &&
+          results.map((b) => (
+            <a key={b.id} href={`/b/${b.id}`} className="card">
+              <div className={`card-media ${b.thumbnailUrl ? '' : 'ph'}`}>
+                {b.thumbnailUrl ? (
+                  <img src={b.thumbnailUrl} alt={b.name} />
+                ) : (
+                  <span>{cuisineEmoji(b.categorySlug)}</span>
+                )}
+              </div>
+              <div className="card-body">
+                <div className="row between" style={{ gap: 8 }}>
+                  <span className="card-title">{b.name}</span>
+                  <span className={`live live-${b.live}`}>{liveLabel[b.live]}</span>
+                </div>
+                <div className="meta">
+                  <span>{b.categorySlug ?? 'food'}</span>
+                  <span className="dot" />
+                  <span className="price">{priceTier(b.priceTier)}</span>
+                  <span className="dot" />
+                  <span>{distance(b.distanceM)}</span>
+                  {b.reviewCount > 0 && (
+                    <>
+                      <span className="dot" />
+                      <span>★ {b.avgRating}</span>
+                    </>
+                  )}
+                </div>
+                <span className="fresh">Updated {freshness(b.lastUpdatedAt)}</span>
+              </div>
+            </a>
+          ))}
+
         {!loading && results.length === 0 && !error && (
-          <p className="muted">No places found. Try widening your filters.</p>
+          <div className="empty">
+            <div className="big">🍽️</div>
+            <p>No places match yet. Try widening your filters or search radius.</p>
+          </div>
         )}
       </div>
     </div>

@@ -69,12 +69,12 @@ export default function AdminPage() {
       <h1 className="h1">Approval Queue</h1>
       <p className="muted">Pending business submissions. Approve genuine listings; reject spam with a reason.</p>
 
-      {error && <p style={{ color: 'var(--danger)' }}>{error}</p>}
+      {error && <p style={{ color: 'var(--brand)' }}>{error}</p>}
 
       {queue.length === 0 && <p className="muted">Queue is empty. 🎉</p>}
       <div className="stack">
         {queue.map((s) => (
-          <div key={s.id} className="card row" style={{ justifyContent: 'space-between' }}>
+          <div key={s.id} className="panel row" style={{ justifyContent: 'space-between' }}>
             <div>
               <strong>{s.name}</strong>
               <div className="muted" style={{ fontSize: 13 }}>
