@@ -1,8 +1,9 @@
 'use client';
 
-import { use, useEffect, useState } from 'react';
-import { apiGet } from '@/lib/ui/api-client';
+import { use, useCallback, useEffect, useState } from 'react';
+import { apiGet, apiSend } from '@/lib/ui/api-client';
 import { cuisineEmoji, freshness, liveLabel, priceTier } from '@/lib/ui/format';
+import { useSession } from '@/lib/ui/use-session';
 
 type Detail = {
   id: string;
@@ -25,16 +26,33 @@ type Detail = {
 
 const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
+type Review = { id: string; rating: number; body: string | null; createdAt: string; authorName: string };
+
 export default function DetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
+  const session = useSession();
   const [d, setD] = useState<Detail | null>(null);
   const [error, setError] = useState('');
+  const [faved, setFaved] = useState(false);
 
-  useEffect(() => {
+  const loadDetail = useCallback(() => {
     apiGet<Detail>(`/businesses/${id}`)
       .then(setD)
       .catch((e) => setError(String(e.message)));
   }, [id]);
+
+  useEffect(() => {
+    loadDetail();
+  }, [loadDetail]);
+
+  async function toggleFav() {
+    try {
+      await apiSend(faved ? 'DELETE' : 'PUT', `/businesses/${id}/favorite`);
+      setFaved(!faved);
+    } catch (e) {
+      setError(String((e as Error).message));
+    }
+  }
 
   if (error) return <p className="error">{error}</p>;
   if (!d)
@@ -73,7 +91,14 @@ export default function DetailPage({ params }: { params: Promise<{ id: string }>
       <div>
         <div className="row between">
           <h1 className="h1" style={{ fontSize: 32 }}>{d.name}</h1>
-          <span className={`live live-${d.live}`}>{liveLabel[d.live]}</span>
+          <div className="row">
+            {session.userId && (
+              <button className="btn btn-sm" onClick={toggleFav}>
+                {faved ? '★ Saved' : '☆ Save'}
+              </button>
+            )}
+            <span className={`live live-${d.live}`}>{liveLabel[d.live]}</span>
+          </div>
         </div>
         <div className="meta" style={{ marginTop: 8, fontSize: 14 }}>
           <span>{d.categorySlug ?? 'food'}</span>
@@ -157,6 +182,128 @@ export default function DetailPage({ params }: { params: Promise<{ id: string }>
               </div>
             ))}
           </div>
+        </div>
+      )}
+
+      <Reviews businessId={id} canReview={!!session.userId} onPosted={loadDetail} />
+    </div>
+  );
+}
+
+function Stars({ n }: { n: number }) {
+  return (
+    <span style={{ color: 'var(--warm)', letterSpacing: 1 }}>
+      {'★'.repeat(n)}
+      {'☆'.repeat(5 - n)}
+    </span>
+  );
+}
+
+function Reviews({
+  businessId,
+  canReview,
+  onPosted,
+}: {
+  businessId: string;
+  canReview: boolean;
+  onPosted: () => void;
+}) {
+  const [reviews, setReviews] = useState<Review[]>([]);
+  const [rating, setRating] = useState(5);
+  const [body, setBody] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+
+  const load = useCallback(() => {
+    apiGet<{ data: Review[] }>(`/businesses/${businessId}/reviews`)
+      .then((r) => setReviews(r.data))
+      .catch(() => {});
+  }, [businessId]);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  async function submit() {
+    setBusy(true);
+    setErr('');
+    try {
+      await apiSend('POST', `/businesses/${businessId}/reviews`, {
+        rating,
+        body: body || undefined,
+      });
+      setBody('');
+      load();
+      onPosted();
+    } catch (e) {
+      setErr(String((e as Error).message));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div>
+      <h2 className="h2">
+        Reviews {reviews.length > 0 && <span className="muted">({reviews.length})</span>}
+      </h2>
+
+      {canReview ? (
+        <div className="panel stack" style={{ marginBottom: 16 }}>
+          <div className="row">
+            <span className="label" style={{ margin: 0 }}>Your rating</span>
+            {[1, 2, 3, 4, 5].map((n) => (
+              <button
+                key={n}
+                onClick={() => setRating(n)}
+                className="btn btn-sm"
+                style={{
+                  padding: '2px 8px',
+                  borderColor: n <= rating ? 'var(--warm)' : 'var(--border)',
+                  color: n <= rating ? 'var(--warm)' : 'var(--muted)',
+                }}
+                aria-label={`${n} star`}
+              >
+                ★
+              </button>
+            ))}
+          </div>
+          <textarea
+            className="input"
+            rows={3}
+            placeholder="Share what you ordered and how it was…"
+            value={body}
+            onChange={(e) => setBody(e.target.value)}
+          />
+          <div>
+            <button className="btn btn-primary" onClick={submit} disabled={busy}>
+              {busy ? 'Posting…' : 'Post review'}
+            </button>
+          </div>
+          {err && <p className="error">{err}</p>}
+        </div>
+      ) : (
+        <p className="muted" style={{ marginBottom: 16 }}>
+          <a href="/signin" style={{ color: 'var(--brand)' }}>Sign in</a> to leave a review.
+        </p>
+      )}
+
+      {reviews.length === 0 ? (
+        <p className="muted">No reviews yet. Be the first.</p>
+      ) : (
+        <div className="stack">
+          {reviews.map((r) => (
+            <div key={r.id} className="panel">
+              <div className="row between">
+                <strong>{r.authorName}</strong>
+                <Stars n={r.rating} />
+              </div>
+              {r.body && <p style={{ margin: '6px 0 0' }}>{r.body}</p>}
+              <p className="muted" style={{ fontSize: 12, margin: '6px 0 0' }}>
+                {new Date(r.createdAt).toLocaleDateString()}
+              </p>
+            </div>
+          ))}
         </div>
       )}
     </div>

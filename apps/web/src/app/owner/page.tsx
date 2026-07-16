@@ -96,6 +96,57 @@ export default function OwnerPage() {
           <ListingRow key={b.id} b={b} onChange={load} onError={setError} />
         ))}
       </div>
+
+      <FeedbackInbox />
+    </div>
+  );
+}
+
+type OwnerReview = {
+  id: string;
+  rating: number;
+  body: string | null;
+  createdAt: string;
+  businessName: string;
+};
+
+function FeedbackInbox() {
+  const [items, setItems] = useState<OwnerReview[]>([]);
+  const [loaded, setLoaded] = useState(false);
+
+  useEffect(() => {
+    apiGet<{ data: OwnerReview[] }>('/me/reviews')
+      .then((r) => setItems(r.data))
+      .catch(() => {})
+      .finally(() => setLoaded(true));
+  }, []);
+
+  if (!loaded) return null;
+
+  return (
+    <div>
+      <h2 className="h2">Reviews received</h2>
+      {items.length === 0 ? (
+        <p className="muted">No customer reviews yet.</p>
+      ) : (
+        <div className="stack">
+          {items.map((r) => (
+            <div key={r.id} className="panel">
+              <div className="row between">
+                <strong>{r.businessName}</strong>
+                <span style={{ color: 'var(--warm)' }}>
+                  {'★'.repeat(r.rating)}
+                  {'☆'.repeat(5 - r.rating)}
+                </span>
+              </div>
+              {r.body && <p style={{ margin: '6px 0 0' }}>{r.body}</p>}
+              <p className="muted" style={{ fontSize: 12, margin: '6px 0 0' }}>
+                {new Date(r.createdAt).toLocaleDateString()}
+              </p>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

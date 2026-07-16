@@ -10,6 +10,9 @@
 
 create extension if not exists postgis;
 
+-- Schema additions applied idempotently here (kept in sync with Drizzle schema).
+alter table reviews add column if not exists author_name text;
+
 -- ---------------------------------------------------------------------------
 -- Grants for Supabase API roles. `drop schema public` (used in --reset) wipes
 -- these, and PostgREST needs them even though RLS still gates the rows.
@@ -266,6 +269,18 @@ create trigger biz_status_guard before update on businesses
 create or replace function stamp_freshness() returns trigger
 language plpgsql set search_path = public as $$
 begin
+  -- Skip when only the denormalized rating counters changed (a review sync),
+  -- so posting a review does NOT bump the owner-freshness badge.
+  if new.avg_rating is distinct from old.avg_rating
+     or new.review_count is distinct from old.review_count then
+    if new.name is not distinct from old.name
+       and new.description is not distinct from old.description
+       and new.live is not distinct from old.live
+       and new.price_tier is not distinct from old.price_tier
+       and new.status is not distinct from old.status then
+      return new; -- rating-only change: leave freshness untouched
+    end if;
+  end if;
   new.updated_at := now();
   if not is_admin() then new.last_owner_update_at := now(); end if;
   return new;
@@ -399,8 +414,11 @@ language sql stable security invoker set search_path = public, extensions as $$
 $$;
 
 -- 8c. keep avg_rating / review_count correct
+-- SECURITY DEFINER: the trigger runs as the reviewer (who can't UPDATE a
+-- business they don't own); definer rights let it maintain the denormalized
+-- avg_rating/review_count regardless of who inserted the review.
 create or replace function recompute_rating() returns trigger
-language plpgsql set search_path = public as $$
+language plpgsql security definer set search_path = public as $$
 declare bid uuid := coalesce(new.business_id, old.business_id);
 begin
   update businesses b set

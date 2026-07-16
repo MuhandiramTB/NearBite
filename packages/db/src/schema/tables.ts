@@ -153,6 +153,7 @@ export const reviews = pgTable(
       .references(() => profiles.id, { onDelete: 'cascade' }),
     rating: smallint('rating').notNull(),
     body: text('body'),
+    authorName: text('author_name'), // denormalized display name (avoids cross-user profile RLS)
     isReported: boolean('is_reported').default(false),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
