@@ -2,7 +2,7 @@
 
 import { use, useCallback, useEffect, useState } from 'react';
 import { apiGet, apiSend } from '@/lib/ui/api-client';
-import { cuisineEmoji, freshness, liveLabel, priceTier } from '@/lib/ui/format';
+import { attrLabel, cuisineEmoji, freshness, liveLabel, priceTier } from '@/lib/ui/format';
 import { useSession } from '@/lib/ui/use-session';
 
 type Detail = {
@@ -17,6 +17,10 @@ type Detail = {
   address: string | null;
   phone: string | null;
   isVegFriendly: boolean;
+  facilities: string[];
+  visitPurposes: string[];
+  convenience: string[];
+  ratings: { food: number; service: number; value: number; cleanliness: number };
   lastUpdatedAt: string;
   hours: { weekday: number; open: string | null; close: string | null; isClosed: boolean }[];
   menu: { id: string; name: string; price: number; currency: string; isVeg: boolean; section: string | null }[];
@@ -26,7 +30,15 @@ type Detail = {
 
 const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
-type Review = { id: string; rating: number; body: string | null; createdAt: string; authorName: string };
+type Review = {
+  id: string;
+  rating: number;
+  body: string | null;
+  createdAt: string;
+  authorName: string;
+  ownerResponse: string | null;
+  ownerRespondedAt: string | null;
+};
 
 export default function DetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
@@ -127,6 +139,52 @@ export default function DetailPage({ params }: { params: Promise<{ id: string }>
         {d.phone && <span className="muted">📞 {d.phone}</span>}
       </div>
 
+      {/* attribute chips */}
+      {[
+        ['Good for', d.visitPurposes],
+        ['Facilities', d.facilities],
+        ['Convenience', d.convenience],
+      ].map(([label, tags]) =>
+        (tags as string[]).length > 0 ? (
+          <div key={label as string}>
+            <p className="eyebrow" style={{ color: 'var(--muted)', marginBottom: 6 }}>{label as string}</p>
+            <div className="row" style={{ gap: 6 }}>
+              {(tags as string[]).map((t) => (
+                <span key={t} className="badge">{attrLabel(t)}</span>
+              ))}
+            </div>
+          </div>
+        ) : null,
+      )}
+
+      {/* multi-dimensional ratings */}
+      {d.reviewCount > 0 &&
+        (d.ratings.food > 0 || d.ratings.service > 0 || d.ratings.value > 0 || d.ratings.cleanliness > 0) && (
+          <div>
+            <p className="eyebrow" style={{ color: 'var(--muted)', marginBottom: 8 }}>Rated by diners</p>
+            <div className="grid grid-2" style={{ gap: 10, maxWidth: 460 }}>
+              {(
+                [
+                  ['Food', d.ratings.food],
+                  ['Service', d.ratings.service],
+                  ['Value', d.ratings.value],
+                  ['Cleanliness', d.ratings.cleanliness],
+                ] as const
+              ).map(([label, val]) => (
+                <div key={label} className="row" style={{ justifyContent: 'space-between' }}>
+                  <span className="muted" style={{ fontSize: 13 }}>{label}</span>
+                  <div className="row" style={{ gap: 8 }}>
+                    <div style={{ width: 80, height: 6, background: 'var(--surface-2)', borderRadius: 3, overflow: 'hidden' }}>
+                      <div style={{ width: `${(val / 5) * 100}%`, height: '100%', background: 'var(--warm)' }} />
+                    </div>
+                    <strong style={{ fontSize: 13, minWidth: 24 }}>{val || '—'}</strong>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
       {d.offers.length > 0 && (
         <div>
           <h2 className="h2">Current offers</h2>
@@ -210,6 +268,7 @@ function Reviews({
 }) {
   const [reviews, setReviews] = useState<Review[]>([]);
   const [rating, setRating] = useState(5);
+  const [subs, setSubs] = useState({ food: 0, service: 0, value: 0, cleanliness: 0 });
   const [body, setBody] = useState('');
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
@@ -231,6 +290,10 @@ function Reviews({
       await apiSend('POST', `/businesses/${businessId}/reviews`, {
         rating,
         body: body || undefined,
+        ratingFood: subs.food || undefined,
+        ratingService: subs.service || undefined,
+        ratingValue: subs.value || undefined,
+        ratingCleanliness: subs.cleanliness || undefined,
       });
       setBody('');
       load();
@@ -268,6 +331,26 @@ function Reviews({
               </button>
             ))}
           </div>
+          <div className="row" style={{ gap: 16, flexWrap: 'wrap' }}>
+            {(['food', 'service', 'value', 'cleanliness'] as const).map((dim) => (
+              <label key={dim} className="row" style={{ gap: 6 }}>
+                <span className="muted" style={{ fontSize: 12, textTransform: 'capitalize', minWidth: 66 }}>
+                  {dim}
+                </span>
+                <select
+                  className="select"
+                  style={{ width: 64, padding: '4px 8px' }}
+                  value={subs[dim]}
+                  onChange={(e) => setSubs({ ...subs, [dim]: Number(e.target.value) })}
+                >
+                  <option value={0}>–</option>
+                  {[1, 2, 3, 4, 5].map((n) => (
+                    <option key={n} value={n}>{n}</option>
+                  ))}
+                </select>
+              </label>
+            ))}
+          </div>
           <textarea
             className="input"
             rows={3}
@@ -302,6 +385,20 @@ function Reviews({
               <p className="muted" style={{ fontSize: 12, margin: '6px 0 0' }}>
                 {new Date(r.createdAt).toLocaleDateString()}
               </p>
+              {r.ownerResponse && (
+                <div
+                  style={{
+                    marginTop: 10,
+                    padding: '10px 12px',
+                    background: 'var(--surface-2)',
+                    borderRadius: 10,
+                    borderLeft: '3px solid var(--brand)',
+                  }}
+                >
+                  <span className="eyebrow" style={{ color: 'var(--brand)' }}>Owner’s reply</span>
+                  <p style={{ margin: '4px 0 0' }}>{r.ownerResponse}</p>
+                </div>
+              )}
             </div>
           ))}
         </div>

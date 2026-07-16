@@ -2,7 +2,8 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { apiGet } from '@/lib/ui/api-client';
-import { cuisineEmoji, distance, freshness, liveLabel, priceTier } from '@/lib/ui/format';
+import { CONVENIENCE, FACILITIES, VISIT_PURPOSES } from '@nearbite/contracts';
+import { attrLabel, cuisineEmoji, distance, freshness, liveLabel, priceTier } from '@/lib/ui/format';
 
 type Card = {
   id: string;
@@ -28,6 +29,11 @@ export default function HomePage() {
   const [maxPrice, setMaxPrice] = useState('');
   const [vegOnly, setVegOnly] = useState(false);
   const [openNow, setOpenNow] = useState(false);
+  const [minRating, setMinRating] = useState('');
+  const [facilities, setFacilities] = useState<string[]>([]);
+  const [purposes, setPurposes] = useState<string[]>([]);
+  const [convenience, setConvenience] = useState<string[]>([]);
+  const [showMore, setShowMore] = useState(false);
   const [q, setQ] = useState('');
   const [results, setResults] = useState<Card[]>([]);
   const [loading, setLoading] = useState(true);
@@ -60,6 +66,10 @@ export default function HomePage() {
     if (maxPrice) p.set('maxPriceTier', maxPrice);
     if (vegOnly) p.set('vegOnly', 'true');
     if (openNow) p.set('openNow', 'true');
+    if (minRating) p.set('minRating', minRating);
+    if (facilities.length) p.set('facilities', facilities.join(','));
+    if (purposes.length) p.set('visitPurposes', purposes.join(','));
+    if (convenience.length) p.set('convenience', convenience.join(','));
     if (q) p.set('q', q);
     try {
       const res = await apiGet<{ data: Card[] }>(`/businesses?${p.toString()}`);
@@ -69,7 +79,7 @@ export default function HomePage() {
     } finally {
       setLoading(false);
     }
-  }, [cityId, category, maxPrice, vegOnly, openNow, q]);
+  }, [cityId, category, maxPrice, vegOnly, openNow, minRating, facilities, purposes, convenience, q]);
 
   useEffect(() => {
     if (cityId) void runSearch();
@@ -131,7 +141,60 @@ export default function HomePage() {
             <input type="checkbox" checked={openNow} onChange={(e) => setOpenNow(e.target.checked)} />
             Open now
           </label>
+          <select
+            className="select"
+            style={{ maxWidth: 150 }}
+            value={minRating}
+            onChange={(e) => setMinRating(e.target.value)}
+          >
+            <option value="">Any rating</option>
+            <option value="4.5">4.5★ +</option>
+            <option value="4">4★ +</option>
+            <option value="3">3★ +</option>
+          </select>
+          <button className="btn btn-sm" onClick={() => setShowMore((v) => !v)}>
+            {showMore ? 'Fewer filters' : 'More filters'}
+          </button>
         </div>
+
+        {showMore && (
+          <div className="stack" style={{ marginTop: 14, gap: 12 }}>
+            {(
+              [
+                ['Good for', VISIT_PURPOSES, purposes, setPurposes],
+                ['Facilities', FACILITIES, facilities, setFacilities],
+                ['Convenience', CONVENIENCE, convenience, setConvenience],
+              ] as const
+            ).map(([label, opts, sel, setSel]) => (
+              <div key={label}>
+                <p className="eyebrow" style={{ color: 'var(--muted)', marginBottom: 6 }}>{label}</p>
+                <div className="row" style={{ gap: 6 }}>
+                  {opts.map((o) => {
+                    const on = (sel as string[]).includes(o);
+                    return (
+                      <button
+                        key={o}
+                        className="check"
+                        style={
+                          on
+                            ? { background: 'var(--brand)', color: 'var(--brand-ink)', borderColor: 'transparent' }
+                            : undefined
+                        }
+                        onClick={() =>
+                          (setSel as (v: string[]) => void)(
+                            on ? (sel as string[]).filter((x) => x !== o) : [...(sel as string[]), o],
+                          )
+                        }
+                      >
+                        {attrLabel(o)}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </section>
 
       {error && <p className="error" style={{ marginTop: 20 }}>{error}</p>}

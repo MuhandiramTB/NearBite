@@ -314,6 +314,12 @@ create trigger biz_freshness before update on businesses
 -- turned into a PostGIS point in one place. SECURITY INVOKER so RLS + the
 -- status-guard trigger still apply to the caller.
 -- ---------------------------------------------------------------------------
+-- Drop the pre-attributes overload so only the 14-arg version exists
+-- (create-or-replace with a new arg count adds an overload, not replaces).
+drop function if exists create_business(
+  text, uuid, uuid, text, text, text, double precision, double precision,
+  text, smallint, boolean);
+
 create or replace function create_business(
   p_name text, p_category_id uuid, p_city_id uuid,
   p_description text, p_description_lang text,
@@ -342,6 +348,10 @@ end $$;
 -- Geo radius via ST_DWithin (uses the GiST index), plus optional filters and
 -- sort. SECURITY INVOKER so RLS still restricts to approved listings for anon.
 -- Cursor pagination is offset-based here for MVP simplicity (small pilot data).
+drop function if exists search_businesses(
+  double precision, double precision, double precision, uuid, text, uuid,
+  smallint, boolean, boolean, text, int, int);
+
 create or replace function search_businesses(
   p_lat double precision, p_lng double precision,
   p_radius_m double precision, p_city_id uuid,

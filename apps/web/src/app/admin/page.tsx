@@ -66,7 +66,10 @@ export default function AdminPage() {
 
   return (
     <div className="stack">
-      <h1 className="h1">Approval Queue</h1>
+      <h1 className="h1">Admin</h1>
+      <AdminAnalytics />
+
+      <h2 className="h2">Approval queue</h2>
       <p className="muted">Pending business submissions. Approve genuine listings; reject spam with a reason.</p>
 
       {error && <p style={{ color: 'var(--brand)' }}>{error}</p>}
@@ -92,6 +95,40 @@ export default function AdminPage() {
           </div>
         ))}
       </div>
+    </div>
+  );
+}
+
+function AdminAnalytics() {
+  const [a, setA] = useState<Record<string, number> | null>(null);
+  useEffect(() => {
+    apiGet<Record<string, number>>('/admin/analytics')
+      .then(setA)
+      .catch(() => {});
+  }, []);
+  if (!a) return null;
+  const n = (k: string) => a[k] ?? 0;
+  const tiles: [string, number | string][] = [
+    ['Users', n('users')],
+    ['Owners', n('owners')],
+    ['Listings', n('listingsTotal')],
+    ['Approved', n('listingsApproved')],
+    ['Pending', n('listingsPending')],
+    ['Reviews', n('reviews')],
+    ['Open reports', n('openReports')],
+    ['Avg rating', n('avgRating') ? `★${n('avgRating')}` : '—'],
+  ];
+  return (
+    <div
+      className="results"
+      style={{ gridTemplateColumns: 'repeat(auto-fit,minmax(110px,1fr))', marginTop: 0, marginBottom: 8 }}
+    >
+      {tiles.map(([label, val]) => (
+        <div key={label} className="panel" style={{ textAlign: 'center', padding: 14 }}>
+          <div style={{ fontSize: 24, fontWeight: 800 }}>{val}</div>
+          <div className="muted" style={{ fontSize: 12 }}>{label}</div>
+        </div>
+      ))}
     </div>
   );
 }

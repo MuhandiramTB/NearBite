@@ -3,7 +3,8 @@
 import { useCallback, useEffect, useState } from 'react';
 import { createSupabaseBrowser } from '@/lib/supabase/client';
 import { apiGet, apiSend } from '@/lib/ui/api-client';
-import { freshness, liveLabel } from '@/lib/ui/format';
+import { CONVENIENCE, FACILITIES, VISIT_PURPOSES } from '@nearbite/contracts';
+import { attrLabel, freshness, liveLabel } from '@/lib/ui/format';
 import { useSession } from '@/lib/ui/use-session';
 
 type MyListing = {
@@ -87,6 +88,8 @@ export default function OwnerPage() {
         </button>
       </div>
 
+      <OwnerAnalytics />
+
       <CreateListing cats={cats} cities={cities} onCreated={load} onError={setError} />
 
       <h2 className="h2">Your listings</h2>
@@ -98,6 +101,76 @@ export default function OwnerPage() {
       </div>
 
       <FeedbackInbox />
+    </div>
+  );
+}
+
+function OwnerAnalytics() {
+  const [a, setA] = useState<{
+    listings: number;
+    approved: number;
+    pending: number;
+    totalReviews: number;
+    avgRating: number;
+    favorites: number;
+  } | null>(null);
+  useEffect(() => {
+    apiGet<typeof a>('/me/analytics').then(setA).catch(() => {});
+  }, []);
+  if (!a || a.listings === 0) return null;
+  const tiles: [string, number | string][] = [
+    ['Listings', a.listings],
+    ['Approved', a.approved],
+    ['Pending', a.pending],
+    ['Reviews', a.totalReviews],
+    ['Avg rating', a.avgRating ? `★${a.avgRating}` : '—'],
+    ['Favorites', a.favorites],
+  ];
+  return (
+    <div>
+      <h2 className="h2">Your dashboard</h2>
+      <div className="results" style={{ gridTemplateColumns: 'repeat(auto-fit,minmax(120px,1fr))', marginTop: 0 }}>
+        {tiles.map(([label, val]) => (
+          <div key={label} className="panel" style={{ textAlign: 'center', padding: 16 }}>
+            <div style={{ fontSize: 26, fontWeight: 800 }}>{val}</div>
+            <div className="muted" style={{ fontSize: 12 }}>{label}</div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function AttrPicker({
+  label,
+  options,
+  selected,
+  onChange,
+}: {
+  label: string;
+  options: readonly string[];
+  selected: string[];
+  onChange: (v: string[]) => void;
+}) {
+  return (
+    <div>
+      <p className="eyebrow" style={{ color: 'var(--muted)', marginBottom: 6 }}>{label}</p>
+      <div className="row" style={{ gap: 6 }}>
+        {options.map((o) => {
+          const on = selected.includes(o);
+          return (
+            <button
+              key={o}
+              type="button"
+              className="check"
+              style={on ? { background: 'var(--brand)', color: 'var(--brand-ink)', borderColor: 'transparent' } : undefined}
+              onClick={() => onChange(on ? selected.filter((x) => x !== o) : [...selected, o])}
+            >
+              {attrLabel(o)}
+            </button>
+          );
+        })}
+      </div>
     </div>
   );
 }
@@ -114,12 +187,15 @@ function FeedbackInbox() {
   const [items, setItems] = useState<OwnerReview[]>([]);
   const [loaded, setLoaded] = useState(false);
 
-  useEffect(() => {
+  const load = useCallback(() => {
     apiGet<{ data: OwnerReview[] }>('/me/reviews')
       .then((r) => setItems(r.data))
       .catch(() => {})
       .finally(() => setLoaded(true));
   }, []);
+  useEffect(() => {
+    load();
+  }, [load]);
 
   if (!loaded) return null;
 
@@ -131,20 +207,59 @@ function FeedbackInbox() {
       ) : (
         <div className="stack">
           {items.map((r) => (
-            <div key={r.id} className="panel">
-              <div className="row between">
-                <strong>{r.businessName}</strong>
-                <span style={{ color: 'var(--warm)' }}>
-                  {'★'.repeat(r.rating)}
-                  {'☆'.repeat(5 - r.rating)}
-                </span>
-              </div>
-              {r.body && <p style={{ margin: '6px 0 0' }}>{r.body}</p>}
-              <p className="muted" style={{ fontSize: 12, margin: '6px 0 0' }}>
-                {new Date(r.createdAt).toLocaleDateString()}
-              </p>
-            </div>
+            <FeedbackItem key={r.id} r={r} onReplied={load} />
           ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function FeedbackItem({ r, onReplied }: { r: OwnerReview; onReplied: () => void }) {
+  const [reply, setReply] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [done, setDone] = useState(false);
+
+  async function send() {
+    setBusy(true);
+    try {
+      await apiSend('POST', `/reviews/${r.id}/respond`, { response: reply });
+      setDone(true);
+      onReplied();
+    } catch {
+      /* surfaced elsewhere */
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="panel">
+      <div className="row between">
+        <strong>{r.businessName}</strong>
+        <span style={{ color: 'var(--warm)' }}>
+          {'★'.repeat(r.rating)}
+          {'☆'.repeat(5 - r.rating)}
+        </span>
+      </div>
+      {r.body && <p style={{ margin: '6px 0 0' }}>{r.body}</p>}
+      <p className="muted" style={{ fontSize: 12, margin: '6px 0 0' }}>
+        {new Date(r.createdAt).toLocaleDateString()}
+      </p>
+      {done ? (
+        <p className="notice" style={{ fontSize: 13, marginTop: 8 }}>Reply posted ✓</p>
+      ) : (
+        <div className="row" style={{ gap: 6, marginTop: 8 }}>
+          <input
+            className="input"
+            style={{ padding: '6px 10px' }}
+            placeholder="Reply publicly…"
+            value={reply}
+            onChange={(e) => setReply(e.target.value)}
+          />
+          <button className="btn btn-sm" onClick={send} disabled={busy || reply.length < 1}>
+            Reply
+          </button>
         </div>
       )}
     </div>
@@ -167,6 +282,9 @@ function CreateListing({
   const [cityId, setCityId] = useState('');
   const [priceTier, setPriceTier] = useState('2');
   const [address, setAddress] = useState('');
+  const [facilities, setFacilities] = useState<string[]>([]);
+  const [purposes, setPurposes] = useState<string[]>([]);
+  const [convenience, setConvenience] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
@@ -188,9 +306,15 @@ function CreateListing({
         lng: 79.8428,
         isVegFriendly: false,
         descriptionLang: 'en',
+        facilities,
+        visitPurposes: purposes,
+        convenience,
       });
       setName('');
       setAddress('');
+      setFacilities([]);
+      setPurposes([]);
+      setConvenience([]);
       onCreated();
     } catch (e) {
       onError(String((e as Error).message));
@@ -222,6 +346,9 @@ function CreateListing({
         </select>
       </div>
       <input className="input" placeholder="Address" value={address} onChange={(e) => setAddress(e.target.value)} />
+      <AttrPicker label="Good for" options={VISIT_PURPOSES} selected={purposes} onChange={setPurposes} />
+      <AttrPicker label="Facilities" options={FACILITIES} selected={facilities} onChange={setFacilities} />
+      <AttrPicker label="Convenience" options={CONVENIENCE} selected={convenience} onChange={setConvenience} />
       <button className="btn btn-primary" onClick={submit} disabled={busy || !name || !categoryId}>
         {busy ? 'Creating…' : 'Create (goes to review)'}
       </button>
@@ -278,6 +405,125 @@ function ListingRow({
         </div>
         <span className="badge">Updated {freshness(b.last_owner_update_at)}</span>
       </div>
+
+      <div className="row" style={{ marginTop: 12, gap: 20, alignItems: 'flex-start' }}>
+        <OfferManager businessId={b.id} onError={onError} />
+        <PhotoUpload businessId={b.id} onError={onError} onDone={onChange} />
+      </div>
+    </div>
+  );
+}
+
+function OfferManager({ businessId, onError }: { businessId: string; onError: (s: string) => void }) {
+  const [offers, setOffers] = useState<{ id: string; title: string; is_active: boolean; ends_at: string }[]>([]);
+  const [title, setTitle] = useState('');
+  const [open, setOpen] = useState(false);
+
+  const load = useCallback(() => {
+    apiGet<{ data: typeof offers }>(`/businesses/${businessId}/offers`)
+      .then((r) => setOffers(r.data))
+      .catch(() => {});
+  }, [businessId]);
+  useEffect(() => {
+    if (open) load();
+  }, [open, load]);
+
+  async function add() {
+    try {
+      const ends = new Date(Date.now() + 7 * 864e5).toISOString(); // 7 days
+      await apiSend('POST', `/businesses/${businessId}/offers`, { title, endsAt: ends });
+      setTitle('');
+      load();
+    } catch (e) {
+      onError(String((e as Error).message));
+    }
+  }
+  async function expire(id: string) {
+    try {
+      await apiSend('DELETE', `/offers/${id}`);
+      load();
+    } catch (e) {
+      onError(String((e as Error).message));
+    }
+  }
+
+  return (
+    <div style={{ flex: 1, minWidth: 220 }}>
+      <button className="btn btn-sm" onClick={() => setOpen((v) => !v)}>
+        {open ? 'Hide offers' : 'Offers'}
+      </button>
+      {open && (
+        <div className="stack" style={{ marginTop: 8, gap: 8 }}>
+          <div className="row" style={{ gap: 6 }}>
+            <input
+              className="input"
+              style={{ padding: '6px 10px' }}
+              placeholder="e.g. 20% off lunch"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+            />
+            <button className="btn btn-sm btn-primary" onClick={add} disabled={title.length < 2}>
+              Add
+            </button>
+          </div>
+          {offers.filter((o) => o.is_active).map((o) => (
+            <div key={o.id} className="row between" style={{ fontSize: 13 }}>
+              <span>🎉 {o.title}</span>
+              <button className="btn btn-sm" onClick={() => expire(o.id)}>End</button>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function PhotoUpload({
+  businessId,
+  onError,
+  onDone,
+}: {
+  businessId: string;
+  onError: (s: string) => void;
+  onDone: () => void;
+}) {
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState('');
+
+  async function onFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setBusy(true);
+    setMsg('');
+    try {
+      // 1) get signed upload URL
+      const { path, token } = await apiSend<{ path: string; token: string }>(
+        'POST',
+        `/businesses/${businessId}/photos/upload-url`,
+        { filename: file.name },
+      );
+      // 2) upload bytes via the browser Supabase client
+      const supabase = createSupabaseBrowser();
+      const up = await supabase.storage.from('business-photos').uploadToSignedUrl(path, token, file);
+      if (up.error) throw up.error;
+      // 3) register the photo
+      await apiSend('POST', `/businesses/${businessId}/photos`, { storagePath: path, kind: 'food' });
+      setMsg('Photo added ✓');
+      onDone();
+    } catch (e) {
+      onError(String((e as Error).message));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div style={{ flex: 1, minWidth: 200 }}>
+      <label className="btn btn-sm" style={{ cursor: 'pointer' }}>
+        {busy ? 'Uploading…' : '📷 Add photo'}
+        <input type="file" accept="image/*" hidden onChange={onFile} disabled={busy} />
+      </label>
+      {msg && <span className="notice" style={{ marginLeft: 8, fontSize: 13 }}>{msg}</span>}
     </div>
   );
 }

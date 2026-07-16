@@ -20,20 +20,45 @@ const admin = createClient(URL, SERVICE, { auth: { persistSession: false } });
 const BUCKET = 'business-photos';
 const PW = 'Passw0rd!x';
 
+// Retry helper — the network to the Supabase region is flaky; auth calls
+// occasionally time out. Retry a few times before giving up.
+async function retry<T>(label: string, fn: () => Promise<T>, tries = 4): Promise<T> {
+  let last: unknown;
+  for (let i = 0; i < tries; i++) {
+    try {
+      return await fn();
+    } catch (e) {
+      last = e;
+      await new Promise((r) => setTimeout(r, 800 * (i + 1)));
+    }
+  }
+  throw new Error(`${label} failed after ${tries} tries: ${String(last)}`);
+}
+
 async function session(email: string, role: 'admin' | 'owner' | 'consumer', name: string) {
-  const { data: list } = await admin.auth.admin.listUsers();
+  const { data: list } = await retry('listUsers', () => admin.auth.admin.listUsers());
   const ex = list.users.find((u) => u.email === email);
-  if (ex) await admin.auth.admin.deleteUser(ex.id);
-  const { data } = await admin.auth.admin.createUser({
-    email,
-    password: PW,
-    email_confirm: true,
-    user_metadata: { full_name: name },
+  if (ex) await retry('deleteUser', () => admin.auth.admin.deleteUser(ex.id));
+  const created = await retry('createUser', async () => {
+    const res = await admin.auth.admin.createUser({
+      email,
+      password: PW,
+      email_confirm: true,
+      user_metadata: { full_name: name },
+    });
+    if (res.error || !res.data.user) throw res.error ?? new Error('no user returned');
+    return res.data.user;
   });
-  await admin.from('profiles').upsert({ id: data.user!.id, role, full_name: name });
+  await retry('upsert profile', async () => {
+    const { error } = await admin.from('profiles').upsert({ id: created.id, role, full_name: name });
+    if (error) throw error;
+  });
   const c = createClient(URL, ANON, { auth: { persistSession: false } });
-  await c.auth.signInWithPassword({ email, password: PW });
-  return { client: c, id: data.user!.id, name };
+  await retry('signIn', async () => {
+    const { data: signIn, error: sErr } = await c.auth.signInWithPassword({ email, password: PW });
+    if (sErr || !signIn.session) throw sErr ?? new Error('no session');
+  });
+  return { client: c, id: created.id, name };
 }
 
 /** Generate a warm food "photo" as an SVG (a real, self-contained image file). */
@@ -71,6 +96,9 @@ type Listing = {
   lng: number;
   address: string;
   desc: string;
+  facilities: string[];
+  purposes: string[];
+  convenience: string[];
   menu: { name: string; price: number; veg: boolean; section: string }[];
   photos: { title: string; emoji: string }[];
 };
@@ -92,6 +120,9 @@ const OWNERS: { email: string; name: string; listings: Listing[] }[] = [
         lng: 79.8428,
         address: 'Fort, Colombo 01',
         desc: 'Family-run kottu spot famous for late-night chicken kottu and hoppers.',
+        facilities: ['ac', 'parking', 'washroom', 'indoor_seating'],
+        purposes: ['friends', 'quick_meal', 'family'],
+        convenience: ['takeaway', 'cash', 'card', 'pickme_uber'],
         menu: [
           { name: 'Chicken Kottu', price: 850, veg: false, section: 'Kottu' },
           { name: 'Cheese Kottu', price: 1050, veg: false, section: 'Kottu' },
@@ -122,6 +153,9 @@ const OWNERS: { email: string; name: string; listings: Listing[] }[] = [
         lng: 79.845,
         address: 'Pettah, Colombo 11',
         desc: 'Bright vegetarian café — brunch bowls, specialty coffee, fresh juices.',
+        facilities: ['ac', 'wifi', 'outdoor_seating', 'rooftop', 'wheelchair'],
+        purposes: ['date', 'relaxing', 'photo_spot', 'business'],
+        convenience: ['reservation', 'card', 'takeaway'],
         menu: [
           { name: 'Avocado Toast', price: 900, veg: true, section: 'Brunch' },
           { name: 'Veggie Buddha Bowl', price: 1200, veg: true, section: 'Brunch' },
@@ -151,6 +185,9 @@ const OWNERS: { email: string; name: string; listings: Listing[] }[] = [
         lng: 79.848,
         address: 'Slave Island, Colombo 02',
         desc: 'Sri Lankan-Chinese classics — nasi goreng, hot butter cuttlefish, fried rice.',
+        facilities: ['ac', 'parking', 'sea_view', 'kids_area', 'indoor_seating'],
+        purposes: ['family', 'birthday', 'business'],
+        convenience: ['delivery', 'takeaway', 'reservation', 'card', 'pickme_uber'],
         menu: [
           { name: 'Nasi Goreng', price: 1200, veg: false, section: 'Mains' },
           { name: 'Hot Butter Cuttlefish', price: 1600, veg: false, section: 'Starters' },
@@ -200,9 +237,11 @@ async function main() {
   await admin.from('businesses').delete().like('name', 'Demo:%');
 
   const created: { id: string; name: string }[] = [];
+  const ownerSessions = new Map<string, SupabaseClient>(); // email → client (reused later)
 
   for (const owner of OWNERS) {
     const o = await session(owner.email, 'owner', owner.name);
+    ownerSessions.set(owner.email, o.client);
     for (const L of owner.listings) {
       const { data: id } = await o.client.rpc('create_business', {
         p_name: L.name,
@@ -216,6 +255,9 @@ async function main() {
         p_phone: '+94 11 234 5678',
         p_price_tier: L.price,
         p_is_veg_friendly: L.veg,
+        p_facilities: L.facilities,
+        p_visit_purposes: L.purposes,
+        p_convenience: L.convenience,
       });
       const bizId = id as string;
 
@@ -257,6 +299,16 @@ async function main() {
         });
       }
 
+      // one active offer per listing
+      await admin.from('offers').insert({
+        business_id: bizId,
+        title: '10% off before 6pm',
+        description: 'Show the app at the counter.',
+        starts_at: new Date(Date.now() - 864e5).toISOString(),
+        ends_at: new Date(Date.now() + 14 * 864e5).toISOString(),
+        is_active: true,
+      });
+
       // approve (admin session) + set live status
       await adminU.client
         .from('businesses')
@@ -278,12 +330,17 @@ async function main() {
     for (let k = 0; k < 2; k++) {
       const biz = created[(ci + k) % created.length]!;
       const r = REVIEW_POOL[(ci + k) % REVIEW_POOL.length]!;
+      const clamp = (x: number) => Math.max(1, Math.min(5, x));
       const { error } = await c.from('reviews').insert({
         business_id: biz.id,
         user_id: uid, // required: RLS rev_insert checks user_id = auth.uid()
         rating: r.rating,
         body: r.body,
         author_name: consumerNames[ci],
+        rating_food: clamp(r.rating),
+        rating_service: clamp(r.rating - (k % 2)),
+        rating_value: clamp(r.rating - ((ci + 1) % 2)),
+        rating_cleanliness: clamp(r.rating),
       });
       if (error) console.log(`  review err (${consumerNames[ci]}→${biz.name}):`, error.message);
       else reviewCount++;
@@ -295,6 +352,32 @@ async function main() {
     }
   }
   console.log(`  ✓ ${reviewCount} reviews + favorites posted`);
+
+  // Owners reply to the first review on each of their listings. REUSE the
+  // existing owner session — re-creating the user would cascade owner_id→null
+  // (businesses.owner_id is ON DELETE SET NULL).
+  for (const owner of OWNERS) {
+    const client = ownerSessions.get(owner.email);
+    if (!client) continue;
+    for (const L of owner.listings) {
+      const biz = created.find((x) => x.name === L.name);
+      if (!biz) continue;
+      const { data: rev } = await admin
+        .from('reviews')
+        .select('id')
+        .eq('business_id', biz.id)
+        .limit(1)
+        .maybeSingle();
+      if (rev) {
+        const { error } = await client.rpc('respond_to_review', {
+          p_review_id: rev.id,
+          p_response: 'Thank you so much! Hope to see you again soon. 🙏',
+        });
+        if (error) console.log(`  reply err (${owner.name}):`, error.message);
+      }
+    }
+  }
+  console.log('  ✓ owner replies posted');
 
   // Show resulting avg ratings (proves the recompute trigger fired).
   const { data: summary } = await admin

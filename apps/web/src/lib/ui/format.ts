@@ -26,6 +26,22 @@ export const liveLabel: Record<string, string> = {
   closed: 'Closed',
 };
 
+/** Human labels + icons for rich-attribute tags. */
+export const ATTR_LABELS: Record<string, string> = {
+  // facilities
+  ac: 'AC', parking: 'Parking', wifi: 'WiFi', outdoor_seating: 'Outdoor seating',
+  indoor_seating: 'Indoor seating', rooftop: 'Rooftop', garden: 'Garden',
+  sea_view: 'Sea view', mountain_view: 'Mountain view', kids_area: 'Kids area',
+  wheelchair: 'Wheelchair access', washroom: 'Washroom',
+  // visit purpose
+  date: 'Couple date', family: 'Family', friends: 'Friends', business: 'Business',
+  birthday: 'Birthday', relaxing: 'Relaxing', photo_spot: 'Photo spot', quick_meal: 'Quick meal',
+  // convenience
+  delivery: 'Delivery', takeaway: 'Takeaway', reservation: 'Reservation',
+  cash: 'Cash', card: 'Card', pickme_uber: 'PickMe / Uber',
+};
+export const attrLabel = (k: string) => ATTR_LABELS[k] ?? k.replace(/_/g, ' ');
+
 /** Emoji used for the gradient placeholder when a listing has no photo. */
 export function cuisineEmoji(slug: string | null | undefined): string {
   const map: Record<string, string> = {
