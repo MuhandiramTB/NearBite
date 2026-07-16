@@ -79,4 +79,10 @@ export class SearchRepository {
     if (error) throw Errors.validation(error.message);
     return data ?? [];
   }
+
+  async cities() {
+    const { data, error } = await this.db.from('cities').select('id,name,is_active');
+    if (error) throw Errors.validation(error.message);
+    return data ?? [];
+  }
 }

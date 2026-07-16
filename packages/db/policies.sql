@@ -197,6 +197,23 @@ drop policy if exists audit_insert on admin_action_log;
 create policy audit_insert on admin_action_log for insert with check (is_admin());
 
 -- ---------------------------------------------------------------------------
+-- Auto-create a profiles row when a new auth user signs up (default consumer).
+-- Without this, a freshly signed-up user has no profile/role.
+-- ---------------------------------------------------------------------------
+create or replace function handle_new_user() returns trigger
+language plpgsql security definer set search_path = public as $$
+begin
+  insert into public.profiles (id, role)
+  values (new.id, 'consumer')
+  on conflict (id) do nothing;
+  return new;
+end $$;
+drop trigger if exists on_auth_user_created on auth.users;
+create trigger on_auth_user_created
+  after insert on auth.users
+  for each row execute function handle_new_user();
+
+-- ---------------------------------------------------------------------------
 -- Storage bucket policies (business-photos). RLS on the DB photos table
 -- protects metadata; these protect the actual files. Path = {business_id}/...
 -- Public READ (listings are public); WRITE only by owner-of-that-business/admin.
@@ -332,6 +349,18 @@ language sql stable security invoker set search_path = public, extensions as $$
     ST_Distance(b.location, o.g) asc
   limit p_limit offset p_offset;
 $$;
+
+-- become_owner: let a signed-in consumer self-upgrade to 'owner' so they can
+-- create listings (self-serve business signup, FR-1.1). Cannot grant 'admin'.
+-- SECURITY DEFINER to bypass the profiles role-escalation guard for THIS path
+-- only (it only ever sets 'owner', never 'admin').
+create or replace function become_owner() returns void
+language plpgsql security definer set search_path = public as $$
+begin
+  if auth.uid() is null then raise exception 'must be signed in'; end if;
+  update profiles set role = 'owner'
+    where id = auth.uid() and role = 'consumer';
+end $$;
 
 -- business_detail: full listing page as one JSON object (FR-3.4). SECURITY
 -- INVOKER so a non-approved listing is invisible to anon (returns null).

@@ -26,6 +26,10 @@ export class SearchService {
   async categories() {
     return this.repo.categories();
   }
+
+  async cities() {
+    return this.repo.cities();
+  }
 }
 
 // Opaque-ish cursor = "o<offset>". Kept dependency-free (no Buffer/Node types).
