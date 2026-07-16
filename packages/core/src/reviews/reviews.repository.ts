@@ -17,6 +17,10 @@ export class ReviewsRepository {
         author_name: authorName,
         rating: input.rating,
         body: input.body ?? null,
+        rating_food: input.ratingFood ?? null,
+        rating_service: input.ratingService ?? null,
+        rating_value: input.ratingValue ?? null,
+        rating_cleanliness: input.ratingCleanliness ?? null,
       })
       .select('id,rating,body,created_at,author_name')
       .single();
@@ -31,7 +35,7 @@ export class ReviewsRepository {
   async listForBusiness(businessId: string) {
     const { data, error } = await this.db
       .from('reviews')
-      .select('id,rating,body,created_at,author_name')
+      .select('id,rating,body,created_at,author_name,owner_response,owner_responded_at')
       .eq('business_id', businessId)
       .order('created_at', { ascending: false });
     if (error) throw Errors.validation(error.message);
@@ -41,7 +45,18 @@ export class ReviewsRepository {
       body: (r.body as string | null) ?? null,
       createdAt: r.created_at as string,
       authorName: (r.author_name as string | null) ?? 'Guest',
+      ownerResponse: (r.owner_response as string | null) ?? null,
+      ownerRespondedAt: (r.owner_responded_at as string | null) ?? null,
     }));
+  }
+
+  async respond(reviewId: string, response: string) {
+    const { error } = await this.db.rpc('respond_to_review', {
+      p_review_id: reviewId,
+      p_response: response,
+    });
+    if (error) throw Errors.validation(error.message);
+    return { ok: true };
   }
 
   async deleteOwn(reviewId: string) {

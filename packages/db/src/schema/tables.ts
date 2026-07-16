@@ -61,10 +61,19 @@ export const businesses = pgTable(
     phone: text('phone'),
     priceTier: smallint('price_tier'),
     isVegFriendly: boolean('is_veg_friendly').default(false),
+    // Rich attributes — many-valued tags (GIN-indexed for @>/&& filtering).
+    facilities: text('facilities').array().default([]), // ac, parking, wifi, rooftop, sea_view…
+    visitPurposes: text('visit_purposes').array().default([]), // date, family, business, photo…
+    convenience: text('convenience').array().default([]), // delivery, takeaway, reservation, card…
     status: listingStatus('status').notNull().default('pending'),
     rejectionReason: text('rejection_reason'),
     live: liveStatus('live').notNull().default('closed'),
     avgRating: numeric('avg_rating', { precision: 2, scale: 1 }).default('0'),
+    // Multi-dimensional rating rollups (avg of per-review sub-scores).
+    ratingFood: numeric('rating_food', { precision: 2, scale: 1 }).default('0'),
+    ratingService: numeric('rating_service', { precision: 2, scale: 1 }).default('0'),
+    ratingValue: numeric('rating_value', { precision: 2, scale: 1 }).default('0'),
+    ratingCleanliness: numeric('rating_cleanliness', { precision: 2, scale: 1 }).default('0'),
     reviewCount: integer('review_count').default(0),
     lastOwnerUpdateAt: timestamp('last_owner_update_at', { withTimezone: true }),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
@@ -154,6 +163,13 @@ export const reviews = pgTable(
     rating: smallint('rating').notNull(),
     body: text('body'),
     authorName: text('author_name'), // denormalized display name (avoids cross-user profile RLS)
+    // Optional per-dimension sub-scores (1-5); null = not rated on that axis.
+    ratingFood: smallint('rating_food'),
+    ratingService: smallint('rating_service'),
+    ratingValue: smallint('rating_value'),
+    ratingCleanliness: smallint('rating_cleanliness'),
+    ownerResponse: text('owner_response'), // owner's reply to this review
+    ownerRespondedAt: timestamp('owner_responded_at', { withTimezone: true }),
     isReported: boolean('is_reported').default(false),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },

@@ -6,3 +6,5 @@ export * from './search/index';
 export * from './media/index';
 export * from './reviews/index';
 export * from './favorites/index';
+export * from './offers/index';
+export * from './analytics/index';

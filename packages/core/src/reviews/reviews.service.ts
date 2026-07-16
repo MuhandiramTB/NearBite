@@ -31,4 +31,10 @@ export class ReviewsService {
     requireAuth(actor);
     return this.repo.report(actor.userId, input);
   }
+
+  /** Owner replies to a review; ownership enforced in the respond_to_review RPC. */
+  async respond(actor: Actor, reviewId: string, response: string) {
+    requireAuth(actor);
+    return this.repo.respond(reviewId, response);
+  }
 }

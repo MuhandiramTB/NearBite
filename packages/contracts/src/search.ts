@@ -12,6 +12,20 @@ export const SearchQuery = z.object({
   maxPriceTier: z.coerce.number().int().min(1).max(4).optional(),
   vegOnly: z.coerce.boolean().default(false),
   openNow: z.coerce.boolean().default(false),
+  // Rich-attribute filters (comma-separated in the query string → arrays).
+  facilities: z
+    .string()
+    .optional()
+    .transform((s) => (s ? s.split(',').filter(Boolean) : undefined)),
+  visitPurposes: z
+    .string()
+    .optional()
+    .transform((s) => (s ? s.split(',').filter(Boolean) : undefined)),
+  convenience: z
+    .string()
+    .optional()
+    .transform((s) => (s ? s.split(',').filter(Boolean) : undefined)),
+  minRating: z.coerce.number().min(0).max(5).optional(),
   sort: z.enum(['distance', 'rating', 'price']).default('distance'),
   limit: z.coerce.number().int().max(50).default(20),
   cursor: z.string().optional(),

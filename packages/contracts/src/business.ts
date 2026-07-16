@@ -70,8 +70,23 @@ export const CreateBusiness = z.object({
   phone: z.string().optional(),
   priceTier: z.number().int().min(1).max(4),
   isVegFriendly: z.boolean().default(false),
+  facilities: z.array(z.string()).default([]),
+  visitPurposes: z.array(z.string()).default([]),
+  convenience: z.array(z.string()).default([]),
 });
 export type CreateBusiness = z.infer<typeof CreateBusiness>;
+
+/** Canonical attribute vocabularies (UI chips + validation reference). */
+export const FACILITIES = [
+  'ac', 'parking', 'wifi', 'outdoor_seating', 'indoor_seating', 'rooftop',
+  'garden', 'sea_view', 'mountain_view', 'kids_area', 'wheelchair', 'washroom',
+] as const;
+export const VISIT_PURPOSES = [
+  'date', 'family', 'friends', 'business', 'birthday', 'relaxing', 'photo_spot', 'quick_meal',
+] as const;
+export const CONVENIENCE = [
+  'delivery', 'takeaway', 'reservation', 'cash', 'card', 'pickme_uber',
+] as const;
 
 /** Partial edit; same shape, all optional. Major edits re-queue (FR-1.8, enforced server-side). */
 export const UpdateBusiness = CreateBusiness.partial();

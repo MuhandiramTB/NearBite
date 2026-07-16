@@ -12,6 +12,24 @@ create extension if not exists postgis;
 
 -- Schema additions applied idempotently here (kept in sync with Drizzle schema).
 alter table reviews add column if not exists author_name text;
+alter table reviews add column if not exists rating_food smallint;
+alter table reviews add column if not exists rating_service smallint;
+alter table reviews add column if not exists rating_value smallint;
+alter table reviews add column if not exists rating_cleanliness smallint;
+alter table reviews add column if not exists owner_response text;
+alter table reviews add column if not exists owner_responded_at timestamptz;
+
+alter table businesses add column if not exists facilities text[] default '{}';
+alter table businesses add column if not exists visit_purposes text[] default '{}';
+alter table businesses add column if not exists convenience text[] default '{}';
+alter table businesses add column if not exists rating_food numeric(2,1) default 0;
+alter table businesses add column if not exists rating_service numeric(2,1) default 0;
+alter table businesses add column if not exists rating_value numeric(2,1) default 0;
+alter table businesses add column if not exists rating_cleanliness numeric(2,1) default 0;
+
+create index if not exists businesses_facilities_idx on businesses using gin (facilities);
+create index if not exists businesses_purposes_idx on businesses using gin (visit_purposes);
+create index if not exists businesses_convenience_idx on businesses using gin (convenience);
 
 -- ---------------------------------------------------------------------------
 -- Grants for Supabase API roles. `drop schema public` (used in --reset) wipes
@@ -271,15 +289,17 @@ language plpgsql set search_path = public as $$
 begin
   -- Skip when only the denormalized rating counters changed (a review sync),
   -- so posting a review does NOT bump the owner-freshness badge.
-  if new.avg_rating is distinct from old.avg_rating
-     or new.review_count is distinct from old.review_count then
-    if new.name is not distinct from old.name
-       and new.description is not distinct from old.description
-       and new.live is not distinct from old.live
-       and new.price_tier is not distinct from old.price_tier
-       and new.status is not distinct from old.status then
-      return new; -- rating-only change: leave freshness untouched
-    end if;
+  if new.name is not distinct from old.name
+     and new.description is not distinct from old.description
+     and new.live is not distinct from old.live
+     and new.price_tier is not distinct from old.price_tier
+     and new.status is not distinct from old.status
+     and new.address is not distinct from old.address
+     and new.facilities is not distinct from old.facilities
+     and new.visit_purposes is not distinct from old.visit_purposes
+     and new.convenience is not distinct from old.convenience then
+    -- nothing owner-facing changed (e.g. only rating rollups): keep freshness
+    return new;
   end if;
   new.updated_at := now();
   if not is_admin() then new.last_owner_update_at := now(); end if;
@@ -298,7 +318,9 @@ create or replace function create_business(
   p_name text, p_category_id uuid, p_city_id uuid,
   p_description text, p_description_lang text,
   p_address text, p_lat double precision, p_lng double precision,
-  p_phone text, p_price_tier smallint, p_is_veg_friendly boolean
+  p_phone text, p_price_tier smallint, p_is_veg_friendly boolean,
+  p_facilities text[] default '{}', p_visit_purposes text[] default '{}',
+  p_convenience text[] default '{}'
 ) returns uuid
 language plpgsql security invoker set search_path = public, extensions as $$
 declare new_id uuid;
@@ -306,11 +328,12 @@ begin
   insert into businesses (
     owner_id, city_id, category_id, name, description, description_lang,
     address, location, phone, price_tier, is_veg_friendly, status, live,
-    last_owner_update_at
+    facilities, visit_purposes, convenience, last_owner_update_at
   ) values (
     auth.uid(), p_city_id, p_category_id, p_name, p_description, p_description_lang,
     p_address, ST_SetSRID(ST_MakePoint(p_lng, p_lat), 4326)::geography,
-    p_phone, p_price_tier, p_is_veg_friendly, 'pending', 'closed', now()
+    p_phone, p_price_tier, p_is_veg_friendly, 'pending', 'closed',
+    p_facilities, p_visit_purposes, p_convenience, now()
   ) returning id into new_id;
   return new_id;
 end $$;
@@ -325,6 +348,8 @@ create or replace function search_businesses(
   p_q text default null, p_category_id uuid default null,
   p_max_price_tier smallint default null, p_veg_only boolean default false,
   p_open_now boolean default false,
+  p_facilities text[] default null, p_visit_purposes text[] default null,
+  p_convenience text[] default null, p_min_rating numeric default null,
   p_sort text default 'distance', p_limit int default 20, p_offset int default 0
 ) returns table (
   id uuid, name text, category_slug text, price_tier smallint,
@@ -352,6 +377,10 @@ language sql stable security invoker set search_path = public, extensions as $$
     and (p_max_price_tier is null or b.price_tier <= p_max_price_tier)
     and (p_veg_only is false or b.is_veg_friendly = true)
     and (p_open_now is false or b.live = 'open')
+    and (p_facilities is null or b.facilities @> p_facilities)
+    and (p_visit_purposes is null or b.visit_purposes @> p_visit_purposes)
+    and (p_convenience is null or b.convenience @> p_convenience)
+    and (p_min_rating is null or b.avg_rating >= p_min_rating)
     and (
       p_q is null
       or b.name ilike '%' || p_q || '%'
@@ -364,6 +393,61 @@ language sql stable security invoker set search_path = public, extensions as $$
     ST_Distance(b.location, o.g) asc
   limit p_limit offset p_offset;
 $$;
+
+-- respond_to_review: owner replies to a review on THEIR listing. SECURITY
+-- DEFINER but guards ownership explicitly.
+create or replace function respond_to_review(p_review_id uuid, p_response text)
+returns void
+language plpgsql security definer set search_path = public as $$
+declare owns boolean;
+begin
+  select exists(
+    select 1 from reviews r join businesses b on b.id = r.business_id
+    where r.id = p_review_id and (b.owner_id = auth.uid() or is_admin())
+  ) into owns;
+  if not owns then raise exception 'not allowed to respond to this review'; end if;
+  update reviews set owner_response = p_response, owner_responded_at = now()
+    where id = p_review_id;
+end $$;
+
+-- owner_analytics: engagement summary across the caller's listings.
+create or replace function owner_analytics()
+returns jsonb
+language sql stable security definer set search_path = public as $$
+  select jsonb_build_object(
+    'listings', (select count(*) from businesses where owner_id = auth.uid()),
+    'approved', (select count(*) from businesses where owner_id = auth.uid() and status='approved'),
+    'pending',  (select count(*) from businesses where owner_id = auth.uid() and status='pending'),
+    'totalReviews', (select count(*) from reviews r join businesses b on b.id=r.business_id where b.owner_id = auth.uid()),
+    'avgRating', coalesce((select round(avg(r.rating),1) from reviews r join businesses b on b.id=r.business_id where b.owner_id = auth.uid()),0),
+    'favorites', (select count(*) from favorites f join businesses b on b.id=f.business_id where b.owner_id = auth.uid()),
+    'perListing', coalesce((select jsonb_agg(jsonb_build_object(
+        'id', b.id, 'name', b.name, 'status', b.status,
+        'avgRating', b.avg_rating, 'reviewCount', b.review_count,
+        'favorites', (select count(*) from favorites f where f.business_id = b.id))
+      order by b.created_at desc)
+      from businesses b where b.owner_id = auth.uid()), '[]'::jsonb)
+  );
+$$;
+
+-- admin_analytics: platform-wide summary (admin only).
+create or replace function admin_analytics()
+returns jsonb
+language plpgsql stable security definer set search_path = public as $$
+begin
+  if not is_admin() then raise exception 'admin only'; end if;
+  return jsonb_build_object(
+    'users', (select count(*) from profiles),
+    'owners', (select count(*) from profiles where role='owner'),
+    'consumers', (select count(*) from profiles where role='consumer'),
+    'listingsTotal', (select count(*) from businesses),
+    'listingsApproved', (select count(*) from businesses where status='approved'),
+    'listingsPending', (select count(*) from businesses where status='pending'),
+    'reviews', (select count(*) from reviews),
+    'openReports', (select count(*) from content_reports where status='open'),
+    'avgRating', coalesce((select round(avg(rating),1) from reviews),0)
+  );
+end $$;
 
 -- become_owner: let a signed-in consumer self-upgrade to 'owner' so they can
 -- create listings (self-serve business signup, FR-1.1). Cannot grant 'admin'.
@@ -390,6 +474,12 @@ language sql stable security invoker set search_path = public, extensions as $$
     'address', b.address,
     'lat', ST_Y(b.location::geometry), 'lng', ST_X(b.location::geometry),
     'phone', b.phone, 'isVegFriendly', b.is_veg_friendly,
+    'facilities', to_jsonb(coalesce(b.facilities, '{}')),
+    'visitPurposes', to_jsonb(coalesce(b.visit_purposes, '{}')),
+    'convenience', to_jsonb(coalesce(b.convenience, '{}')),
+    'ratings', jsonb_build_object(
+      'food', b.rating_food, 'service', b.rating_service,
+      'value', b.rating_value, 'cleanliness', b.rating_cleanliness),
     'lastUpdatedAt', coalesce(b.last_owner_update_at, b.updated_at),
     'hours', coalesce((select jsonb_agg(jsonb_build_object(
         'weekday', h.weekday, 'open', h.open_time, 'close', h.close_time,
@@ -422,8 +512,12 @@ language plpgsql security definer set search_path = public as $$
 declare bid uuid := coalesce(new.business_id, old.business_id);
 begin
   update businesses b set
-    avg_rating   = coalesce((select round(avg(rating),1) from reviews where business_id=bid),0),
-    review_count = (select count(*) from reviews where business_id=bid)
+    avg_rating        = coalesce((select round(avg(rating),1) from reviews where business_id=bid),0),
+    review_count      = (select count(*) from reviews where business_id=bid),
+    rating_food       = coalesce((select round(avg(rating_food),1) from reviews where business_id=bid and rating_food is not null),0),
+    rating_service    = coalesce((select round(avg(rating_service),1) from reviews where business_id=bid and rating_service is not null),0),
+    rating_value      = coalesce((select round(avg(rating_value),1) from reviews where business_id=bid and rating_value is not null),0),
+    rating_cleanliness= coalesce((select round(avg(rating_cleanliness),1) from reviews where business_id=bid and rating_cleanliness is not null),0)
   where b.id = bid;
   return null;
 end $$;

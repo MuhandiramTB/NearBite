@@ -4,8 +4,18 @@ import { z } from 'zod';
 export const CreateReview = z.object({
   rating: z.number().int().min(1).max(5),
   body: z.string().max(2000).optional(),
+  ratingFood: z.number().int().min(1).max(5).optional(),
+  ratingService: z.number().int().min(1).max(5).optional(),
+  ratingValue: z.number().int().min(1).max(5).optional(),
+  ratingCleanliness: z.number().int().min(1).max(5).optional(),
 });
 export type CreateReview = z.infer<typeof CreateReview>;
+
+/** Owner reply to a review. */
+export const RespondToReview = z.object({
+  response: z.string().min(1).max(1000),
+});
+export type RespondToReview = z.infer<typeof RespondToReview>;
 
 export const ReviewView = z.object({
   id: z.string().uuid(),

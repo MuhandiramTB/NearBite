@@ -23,6 +23,9 @@ export class ListingsRepository {
       p_phone: input.phone ?? null,
       p_price_tier: input.priceTier,
       p_is_veg_friendly: input.isVegFriendly,
+      p_facilities: input.facilities,
+      p_visit_purposes: input.visitPurposes,
+      p_convenience: input.convenience,
     });
     if (error) throw Errors.validation(error.message);
     return { id: data as string, status: 'pending' };

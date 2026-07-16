@@ -5,3 +5,4 @@ export * from './search';
 export * from './review';
 export * from './admin';
 export * from './media';
+export * from './offer';
