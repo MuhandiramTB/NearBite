@@ -33,17 +33,17 @@ The wider vision below is the target; this table is the honest current state.
 | Favorites (private per user) | ✅ Done |
 | Owner "Reviews received" feedback inbox | ✅ Done |
 | Live status (Open / Busy / Closed) + "last updated" freshness badge | ✅ Done |
-| Photo upload (signed direct-to-storage) | ✅ API done · ⏳ owner upload UI pending |
-| Offers / promotions | ✅ API + schema · ⏳ UI pending |
+| Photo upload (signed direct-to-storage) | ✅ API + owner upload UI |
+| Offers / promotions | ✅ API + owner create/expire UI + shown on detail |
 | Admin approval queue + audit log | ✅ Done · ⏳ report-moderation UI pending |
-| **Owner responds to reviews** | ⏳ Planned |
-| **Facilities** (AC, parking, WiFi, rooftop, sea view, kids area, accessibility…) | ⏳ Planned (schema addition) |
-| **Visit purpose** (date, family, business, photo spot…) | ⏳ Planned (schema addition) |
-| **Convenience flags** (delivery, takeaway, reservation, payment types) | ⏳ Planned (schema addition) |
-| **Multi-dimensional ratings** (cleanliness, service, taste, value) | ⏳ Planned |
-| **Owner engagement analytics** | ⏳ Planned |
-| **Admin user management + system analytics** | ⏳ Planned |
-| Mobile app (Expo) | ⏳ Auth shell only; screens pending (M4) |
+| **Owner responds to reviews** | ✅ Done (owner inbox reply + shown on detail) |
+| **Facilities** (AC, parking, WiFi, rooftop, sea view, kids area, accessibility…) | ✅ Done (schema + filters + UI) |
+| **Visit purpose** (date, family, business, photo spot…) | ✅ Done (schema + filters + UI) |
+| **Convenience flags** (delivery, takeaway, reservation, payment types) | ✅ Done (schema + filters + UI) |
+| **Multi-dimensional ratings** (cleanliness, service, value, food) | ✅ Done (per-review sub-scores + rollups + bars) |
+| **Owner engagement analytics** | ✅ Done (dashboard tiles) |
+| **Admin system analytics** | ✅ Done (platform tiles) · ⏳ user management pending |
+| Mobile app (Expo) | ✅ Consumer search + detail + sign-in (live API) |
 | AI recommendations, voice search, ordering, loyalty | 🔮 Future |
 
 ---
