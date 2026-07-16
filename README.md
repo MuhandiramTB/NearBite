@@ -35,14 +35,18 @@ The wider vision below is the target; this table is the honest current state.
 | Live status (Open / Busy / Closed) + "last updated" freshness badge | ✅ Done |
 | Photo upload (signed direct-to-storage) | ✅ API + owner upload UI |
 | Offers / promotions | ✅ API + owner create/expire UI + shown on detail |
-| Admin approval queue + audit log | ✅ Done · ⏳ report-moderation UI pending |
+| Admin approval queue + audit log | ✅ Done |
+| Admin user management (list/search, change role) | ✅ Done |
+| Report moderation (queue, dismiss, remove review / deactivate listing) | ✅ Done |
+| Owner notifications (listing status change, new review) | ✅ Done (in-app bell; email/push future) |
+| Trilingual UI (English / Sinhala / Tamil) | ✅ Done (dictionary + switcher, applied to key screens) |
 | **Owner responds to reviews** | ✅ Done (owner inbox reply + shown on detail) |
 | **Facilities** (AC, parking, WiFi, rooftop, sea view, kids area, accessibility…) | ✅ Done (schema + filters + UI) |
 | **Visit purpose** (date, family, business, photo spot…) | ✅ Done (schema + filters + UI) |
 | **Convenience flags** (delivery, takeaway, reservation, payment types) | ✅ Done (schema + filters + UI) |
 | **Multi-dimensional ratings** (cleanliness, service, value, food) | ✅ Done (per-review sub-scores + rollups + bars) |
 | **Owner engagement analytics** | ✅ Done (dashboard tiles) |
-| **Admin system analytics** | ✅ Done (platform tiles) · ⏳ user management pending |
+| **Admin system analytics** | ✅ Done (platform tiles) |
 | Mobile app (Expo) | ✅ Consumer search + detail + sign-in (live API) |
 | AI recommendations, voice search, ordering, loyalty | 🔮 Future |
 
