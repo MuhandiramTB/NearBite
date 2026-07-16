@@ -1,0 +1,9 @@
+{
+  "extends": "@nearbite/config/tsconfig",
+  "compilerOptions": {
+    "outDir": "dist",
+    "noEmit": true,
+    "types": ["node"]
+  },
+  "include": ["src", "drizzle.config.ts"]
+}

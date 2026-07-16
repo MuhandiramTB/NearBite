@@ -1,0 +1,14 @@
+{
+  "extends": "@nearbite/config/tsconfig",
+  "compilerOptions": {
+    "jsx": "react-jsx",
+    "lib": ["DOM", "ES2022"],
+    "moduleResolution": "Bundler",
+    "noEmit": true,
+    "types": ["react", "expo"],
+    "paths": {
+      "@/*": ["./src/*"]
+    }
+  },
+  "include": ["app/**/*.ts", "app/**/*.tsx", "src/**/*.ts", "src/**/*.tsx"]
+}

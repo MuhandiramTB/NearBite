@@ -1,0 +1,20 @@
+# deps
+node_modules/
+.pnpm-store/
+
+# builds
+dist/
+.next/
+.turbo/
+.expo/
+*.tsbuildinfo
+
+# env & secrets  — NEVER commit these
+.env
+.env.*
+!.env.example
+
+# os / editor
+.DS_Store
+Thumbs.db
+*.log
