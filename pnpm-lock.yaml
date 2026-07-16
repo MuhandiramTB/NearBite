@@ -168,9 +168,9 @@ importers:
       '@nearbite/contracts':
         specifier: workspace:*
         version: link:../contracts
-      '@nearbite/db':
-        specifier: workspace:*
-        version: link:../db
+      '@supabase/supabase-js':
+        specifier: ^2.47.10
+        version: 2.110.5
       zod:
         specifier: ^3.24.1
         version: 3.25.76
@@ -190,6 +190,9 @@ importers:
 
   packages/db:
     dependencies:
+      '@supabase/supabase-js':
+        specifier: ^2.47.10
+        version: 2.110.5
       drizzle-orm:
         specifier: ^0.38.3
         version: 0.38.4(@types/react@19.0.4)(postgres@3.4.9)(react@19.2.7)

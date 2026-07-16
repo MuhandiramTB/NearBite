@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { anonymous, requireAdmin, requireAuth, requireOwner } from './auth.js';
-import { AppError } from './errors.js';
+import { anonymous, requireAdmin, requireAuth, requireOwner } from './auth';
+import { AppError } from './errors';
 
 describe('auth guards', () => {
   it('rejects anonymous on requireAuth', () => {

@@ -7,7 +7,8 @@ export default defineConfig({
   out: './migrations',
   dialect: 'postgresql',
   dbCredentials: {
-    url: process.env.DATABASE_URL ?? '',
+    // Prefer the session pooler (5432) for migrations; fall back to DATABASE_URL.
+    url: process.env.DIRECT_URL ?? process.env.DATABASE_URL ?? '',
   },
   verbose: true,
   strict: true,

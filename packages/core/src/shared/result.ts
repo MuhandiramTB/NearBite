@@ -1,4 +1,4 @@
-import type { AppError } from './errors.js';
+import type { AppError } from './errors';
 
 /**
  * Lightweight Result type for flows where throwing is undesirable

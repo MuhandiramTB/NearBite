@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { Locale, LiveStatus } from './common.js';
+import { Locale, LiveStatus } from './common';
 
 /** Lean list-item payload returned by search (API §4 BusinessCard). */
 export const BusinessCard = z.object({

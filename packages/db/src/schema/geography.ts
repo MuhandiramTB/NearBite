@@ -9,6 +9,8 @@ import { customType } from 'drizzle-orm/pg-core';
  */
 export const geographyPoint = customType<{ data: string; driverData: string }>({
   dataType() {
+    // Bare type; the migration runner sets search_path to include `extensions`
+    // (where Supabase installs PostGIS) so this resolves.
     return 'geography(Point,4326)';
   },
 });

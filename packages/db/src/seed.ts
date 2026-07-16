@@ -5,7 +5,7 @@
  * Seeds the pilot city + cuisine categories. This is also where the
  * launch-gate seed listings (§ roadmap, ≥50) would be inserted later.
  */
-import { createDbClient, schema } from './index.js';
+import { createDbClient, schema } from './index';
 
 const url = process.env.DATABASE_URL;
 if (!url) throw new Error('DATABASE_URL is required to seed');

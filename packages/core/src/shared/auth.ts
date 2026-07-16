@@ -1,5 +1,5 @@
 import type { UserRole } from '@nearbite/contracts';
-import { Errors } from './errors.js';
+import { Errors } from './errors';
 
 /**
  * The authenticated actor for a request, resolved from the Supabase JWT +

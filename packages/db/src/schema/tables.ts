@@ -14,8 +14,8 @@ import {
   unique,
   uuid,
 } from 'drizzle-orm/pg-core';
-import { listingStatus, liveStatus, reportStatus, userRole } from './enums.js';
-import { geographyPoint } from './geography.js';
+import { listingStatus, liveStatus, reportStatus, userRole } from './enums';
+import { geographyPoint } from './geography';
 
 // NOTE: `profiles.id` references auth.users(id) (Supabase-managed). We don't
 // model auth.users in Drizzle; the FK is added in the RLS/policies SQL step.

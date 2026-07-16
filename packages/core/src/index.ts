@@ -1,3 +1,4 @@
-/** @nearbite/core — the modular monolith. Module folders (listings, search, …)
- *  are added in M1+. For M0 only the shared kernel exists. */
-export * from './shared/index.js';
+/** @nearbite/core — the modular monolith. */
+export * from './shared/index';
+export * from './listings/index';
+export * from './admin/index';

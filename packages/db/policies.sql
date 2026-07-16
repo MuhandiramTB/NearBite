@@ -10,6 +10,22 @@
 
 create extension if not exists postgis;
 
+-- ---------------------------------------------------------------------------
+-- Grants for Supabase API roles. `drop schema public` (used in --reset) wipes
+-- these, and PostgREST needs them even though RLS still gates the rows.
+-- RLS is the row-level gate; these grants are the table-level "can touch it".
+-- ---------------------------------------------------------------------------
+grant usage on schema public to anon, authenticated, service_role;
+grant all on all tables in schema public to anon, authenticated, service_role;
+grant all on all sequences in schema public to anon, authenticated, service_role;
+grant all on all functions in schema public to anon, authenticated, service_role;
+alter default privileges in schema public
+  grant all on tables to anon, authenticated, service_role;
+alter default privileges in schema public
+  grant all on sequences to anon, authenticated, service_role;
+alter default privileges in schema public
+  grant all on functions to anon, authenticated, service_role;
+
 -- profiles.id references Supabase-managed auth.users (not modeled in Drizzle)
 do $$ begin
   alter table profiles
@@ -207,6 +223,32 @@ end $$;
 drop trigger if exists biz_freshness on businesses;
 create trigger biz_freshness before update on businesses
   for each row execute function stamp_freshness();
+
+-- ---------------------------------------------------------------------------
+-- RPCs (PostgREST-callable). Geography inserts go through here so lat/lng are
+-- turned into a PostGIS point in one place. SECURITY INVOKER so RLS + the
+-- status-guard trigger still apply to the caller.
+-- ---------------------------------------------------------------------------
+create or replace function create_business(
+  p_name text, p_category_id uuid, p_city_id uuid,
+  p_description text, p_description_lang text,
+  p_address text, p_lat double precision, p_lng double precision,
+  p_phone text, p_price_tier smallint, p_is_veg_friendly boolean
+) returns uuid
+language plpgsql security invoker set search_path = public, extensions as $$
+declare new_id uuid;
+begin
+  insert into businesses (
+    owner_id, city_id, category_id, name, description, description_lang,
+    address, location, phone, price_tier, is_veg_friendly, status, live,
+    last_owner_update_at
+  ) values (
+    auth.uid(), p_city_id, p_category_id, p_name, p_description, p_description_lang,
+    p_address, ST_SetSRID(ST_MakePoint(p_lng, p_lat), 4326)::geography,
+    p_phone, p_price_tier, p_is_veg_friendly, 'pending', 'closed', now()
+  ) returning id into new_id;
+  return new_id;
+end $$;
 
 -- 8c. keep avg_rating / review_count correct
 create or replace function recompute_rating() returns trigger
