@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { apiGet } from '@/lib/ui/api-client';
 import { CONVENIENCE, FACILITIES, VISIT_PURPOSES } from '@nearbite/contracts';
 import { attrLabel, cuisineEmoji, distance, freshness, liveLabel, priceTier } from '@/lib/ui/format';
+import { useI18n } from '@/lib/i18n';
 
 type Card = {
   id: string;
@@ -23,6 +24,7 @@ type City = { id: string };
 const DEFAULT = { lat: 6.9344, lng: 79.8428 }; // Colombo Fort (pilot)
 
 export default function HomePage() {
+  const { t } = useI18n();
   const [cats, setCats] = useState<Category[]>([]);
   const [cityId, setCityId] = useState('');
   const [category, setCategory] = useState('');
@@ -89,22 +91,21 @@ export default function HomePage() {
     <div className="stack" style={{ gap: 4 }}>
       <section className="hero">
         <p className="eyebrow">Colombo pilot</p>
-        <h1 className="h1">Find where to eat — with menus you can trust.</h1>
+        <h1 className="h1">{t('home.title')}</h1>
         <p className="lead" style={{ marginTop: 10 }}>
-          Real prices, real photos, live open/busy status — kept fresh by the owners themselves, not
-          stale listings.
+          {t('home.subtitle')}
         </p>
 
         <div className="searchbar">
           <input
             className="input search-input"
-            placeholder="Search a dish or place — “kottu”, “cafe”…"
+            placeholder={t('home.searchPlaceholder')}
             value={q}
             onChange={(e) => setQ(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && runSearch()}
           />
           <button className="btn btn-primary" onClick={runSearch} disabled={loading}>
-            {loading ? 'Searching…' : 'Search'}
+            {loading ? '…' : t('common.search')}
           </button>
         </div>
 

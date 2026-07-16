@@ -8,3 +8,4 @@ export * from './reviews/index';
 export * from './favorites/index';
 export * from './offers/index';
 export * from './analytics/index';
+export * from './notifications/index';

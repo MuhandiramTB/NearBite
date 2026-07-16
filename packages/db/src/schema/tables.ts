@@ -203,6 +203,23 @@ export const contentReports = pgTable('content_reports', {
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
+export const notifications = pgTable(
+  'notifications',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => profiles.id, { onDelete: 'cascade' }),
+    type: text('type').notNull(), // 'listing_status' | 'new_review'
+    title: text('title').notNull(),
+    body: text('body'),
+    link: text('link'), // e.g. /b/<id> or /owner
+    isRead: boolean('is_read').default(false),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index('notifications_user_idx').on(t.userId, t.isRead)],
+);
+
 export const adminActionLog = pgTable('admin_action_log', {
   id: uuid('id').primaryKey().defaultRandom(),
   adminId: uuid('admin_id').references(() => profiles.id),

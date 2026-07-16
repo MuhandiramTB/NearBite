@@ -36,4 +36,24 @@ export class AdminService {
     await this.repo.logAction(actor.userId as string, 'reject', businessId, decision.reason);
     return row;
   }
+
+  async listUsers(actor: Actor, q?: string) {
+    requireAdmin(actor);
+    return this.repo.listUsers(q);
+  }
+
+  async setRole(actor: Actor, userId: string, role: 'consumer' | 'owner' | 'admin') {
+    requireAdmin(actor);
+    return this.repo.setRole(userId, role);
+  }
+
+  async reports(actor: Actor) {
+    requireAdmin(actor);
+    return this.repo.reports();
+  }
+
+  async resolveReport(actor: Actor, reportId: string, status: 'reviewed' | 'dismissed', action?: string) {
+    requireAdmin(actor);
+    return this.repo.resolveReport(reportId, status, action);
+  }
 }

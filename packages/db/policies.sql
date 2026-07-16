@@ -27,6 +27,18 @@ alter table businesses add column if not exists rating_service numeric(2,1) defa
 alter table businesses add column if not exists rating_value numeric(2,1) default 0;
 alter table businesses add column if not exists rating_cleanliness numeric(2,1) default 0;
 
+create table if not exists notifications (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references profiles(id) on delete cascade,
+  type text not null,
+  title text not null,
+  body text,
+  link text,
+  is_read boolean default false,
+  created_at timestamptz not null default now()
+);
+create index if not exists notifications_user_idx on notifications (user_id, is_read);
+
 create index if not exists businesses_facilities_idx on businesses using gin (facilities);
 create index if not exists businesses_purposes_idx on businesses using gin (visit_purposes);
 create index if not exists businesses_convenience_idx on businesses using gin (convenience);
@@ -188,6 +200,15 @@ create policy rev_update_admin on reviews for update using (is_admin()) with che
 
 drop policy if exists fav_all on favorites;
 create policy fav_all on favorites for all
+  using (user_id = auth.uid()) with check (user_id = auth.uid());
+
+-- notifications: users read/update (mark-read) their own; inserts come from
+-- SECURITY DEFINER triggers, so no insert policy is needed for end users.
+alter table notifications enable row level security;
+drop policy if exists notif_read on notifications;
+create policy notif_read on notifications for select using (user_id = auth.uid());
+drop policy if exists notif_update on notifications;
+create policy notif_update on notifications for update
   using (user_id = auth.uid()) with check (user_id = auth.uid());
 
 drop policy if exists rep_insert on content_reports;
@@ -420,6 +441,73 @@ begin
     where id = p_review_id;
 end $$;
 
+-- admin_list_users: users + role + counts (admin only).
+create or replace function admin_list_users(p_q text default null)
+returns jsonb
+language plpgsql stable security definer set search_path = public as $$
+begin
+  if not is_admin() then raise exception 'admin only'; end if;
+  return coalesce((
+    select jsonb_agg(jsonb_build_object(
+      'id', p.id, 'fullName', p.full_name, 'role', p.role, 'createdAt', p.created_at,
+      'listings', (select count(*) from businesses b where b.owner_id = p.id),
+      'reviews', (select count(*) from reviews r where r.user_id = p.id))
+      order by p.created_at desc)
+    from profiles p
+    where p_q is null or p.full_name ilike '%'||p_q||'%'
+  ), '[]'::jsonb);
+end $$;
+
+-- admin_set_role: change a user's role (admin only; can't demote self).
+create or replace function admin_set_role(p_user_id uuid, p_role user_role)
+returns void
+language plpgsql security definer set search_path = public as $$
+begin
+  if not is_admin() then raise exception 'admin only'; end if;
+  if p_user_id = auth.uid() then raise exception 'cannot change your own role'; end if;
+  update profiles set role = p_role where id = p_user_id;
+end $$;
+
+-- admin_reports: moderation queue with resolved target details (admin only).
+create or replace function admin_reports()
+returns jsonb
+language plpgsql stable security definer set search_path = public as $$
+begin
+  if not is_admin() then raise exception 'admin only'; end if;
+  return coalesce((
+    select jsonb_agg(jsonb_build_object(
+      'id', cr.id, 'targetType', cr.target_type, 'targetId', cr.target_id,
+      'reason', cr.reason, 'status', cr.status, 'createdAt', cr.created_at,
+      'targetLabel', case
+        when cr.target_type = 'review' then
+          coalesce((select left(coalesce(r.body, '(no text)'),80)||' — '||coalesce(r.author_name,'?')
+                    from reviews r where r.id = cr.target_id), '(deleted review)')
+        when cr.target_type = 'business' then
+          coalesce((select b.name from businesses b where b.id = cr.target_id), '(deleted listing)')
+        else '?' end)
+      order by cr.created_at desc)
+    from content_reports cr where cr.status = 'open'
+  ), '[]'::jsonb);
+end $$;
+
+-- admin_resolve_report: mark reviewed/dismissed and optionally act on the target.
+create or replace function admin_resolve_report(
+  p_report_id uuid, p_status report_status, p_action text default null
+) returns void
+language plpgsql security definer set search_path = public as $$
+declare r content_reports;
+begin
+  if not is_admin() then raise exception 'admin only'; end if;
+  select * into r from content_reports where id = p_report_id;
+  if not found then raise exception 'report not found'; end if;
+  if p_action = 'remove' then
+    if r.target_type = 'review' then delete from reviews where id = r.target_id;
+    elsif r.target_type = 'business' then update businesses set status = 'deactivated' where id = r.target_id;
+    end if;
+  end if;
+  update content_reports set status = p_status where id = p_report_id;
+end $$;
+
 -- owner_analytics: engagement summary across the caller's listings.
 create or replace function owner_analytics()
 returns jsonb
@@ -534,3 +622,44 @@ end $$;
 drop trigger if exists rev_rating_sync on reviews;
 create trigger rev_rating_sync after insert or update or delete on reviews
   for each row execute function recompute_rating();
+
+-- 8d. notify owner when their listing's status changes (approved/rejected).
+create or replace function notify_status_change() returns trigger
+language plpgsql security definer set search_path = public as $$
+begin
+  if new.status is distinct from old.status and new.owner_id is not null then
+    insert into notifications (user_id, type, title, body, link)
+    values (
+      new.owner_id, 'listing_status',
+      'Listing ' || new.status,
+      new.name || ' is now ' || new.status ||
+        coalesce(' — ' || new.rejection_reason, ''),
+      '/owner'
+    );
+  end if;
+  return new;
+end $$;
+drop trigger if exists biz_notify_status on businesses;
+create trigger biz_notify_status after update on businesses
+  for each row execute function notify_status_change();
+
+-- 8e. notify owner when a new review lands on their listing.
+create or replace function notify_new_review() returns trigger
+language plpgsql security definer set search_path = public as $$
+declare oid uuid; bname text;
+begin
+  select owner_id, name into oid, bname from businesses where id = new.business_id;
+  if oid is not null then
+    insert into notifications (user_id, type, title, body, link)
+    values (
+      oid, 'new_review',
+      'New ' || new.rating || '★ review',
+      coalesce(new.author_name,'Someone') || ' reviewed ' || bname,
+      '/b/' || new.business_id
+    );
+  end if;
+  return new;
+end $$;
+drop trigger if exists rev_notify on reviews;
+create trigger rev_notify after insert on reviews
+  for each row execute function notify_new_review();
