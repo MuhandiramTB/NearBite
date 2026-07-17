@@ -18,6 +18,11 @@ export class MediaRepository {
     private readonly storageAdmin: Db,
   ) {}
 
+  private publicUrl(path: string | null): string | null {
+    if (!path) return null;
+    return this.db.storage.from(BUCKET).getPublicUrl(path).data.publicUrl;
+  }
+
   /** Verify the caller owns (or admins) the business before we hand out an
    *  upload URL. RLS would also block a mismatched write, but we fail early. */
   async assertCanWrite(businessId: string): Promise<void> {
@@ -61,6 +66,31 @@ export class MediaRepository {
       .update({ last_owner_update_at: new Date().toISOString() })
       .eq('id', businessId);
     return data;
+  }
+
+  async listPhotos(businessId: string) {
+    const { data, error } = await this.db
+      .from('photos')
+      .select('id,storage_path,kind,sort_order')
+      .eq('business_id', businessId)
+      .order('sort_order', { ascending: true })
+      .order('created_at', { ascending: true });
+    if (error) throw Errors.validation(error.message);
+    return (data ?? []).map((p) => ({
+      id: p.id as string,
+      url: this.publicUrl(p.storage_path as string),
+      kind: (p.kind as string) ?? 'venue',
+      sortOrder: (p.sort_order as number) ?? 0,
+    }));
+  }
+
+  async reorder(businessId: string, photoIds: string[]) {
+    const { error } = await this.db.rpc('reorder_photos', {
+      p_business_id: businessId,
+      p_photo_ids: photoIds,
+    });
+    if (error) throw Errors.validation(error.message);
+    return { ok: true };
   }
 
   async deletePhoto(photoId: string) {

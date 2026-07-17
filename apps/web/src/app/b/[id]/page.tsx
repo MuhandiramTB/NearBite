@@ -4,6 +4,7 @@ import { use, useCallback, useEffect, useState } from 'react';
 import { apiGet, apiSend } from '@/lib/ui/api-client';
 import { attrLabel, cuisineEmoji, freshness, liveLabel, priceTier } from '@/lib/ui/format';
 import { useAuthGate } from '@/lib/auth/auth-gate';
+import { getDirections, openInMaps } from '@/lib/ui/maps';
 
 type Detail = {
   id: string;
@@ -17,6 +18,8 @@ type Detail = {
   address: string | null;
   phone: string | null;
   isVegFriendly: boolean;
+  lat: number;
+  lng: number;
   facilities: string[];
   visitPurposes: string[];
   convenience: string[];
@@ -244,6 +247,33 @@ export default function DetailPage({ params }: { params: Promise<{ id: string }>
       )}
 
       <Reviews businessId={id} onPosted={loadDetail} requireAuth={requireAuth} />
+
+      {/* Sticky action bar (spec §10) */}
+      <div className="action-bar">
+        {d.phone && (
+          <a className="ab-btn" href={`tel:${d.phone}`}>
+            <span>📞</span>Call
+          </a>
+        )}
+        <button className="ab-btn" onClick={() => getDirections(d.lat, d.lng)}>
+          <span>🧭</span>Directions
+        </button>
+        <button
+          className="ab-btn"
+          onClick={() => {
+            if (navigator.share) navigator.share({ title: d.name, url: window.location.href }).catch(() => {});
+            else navigator.clipboard?.writeText(window.location.href);
+          }}
+        >
+          <span>↗</span>Share
+        </button>
+        <button className="ab-btn" onClick={toggleFav}>
+          <span>{faved ? '★' : '☆'}</span>Save
+        </button>
+        <button className="ab-btn ab-primary" onClick={() => openInMaps(d.lat, d.lng, d.name)}>
+          <span>📍</span>Map
+        </button>
+      </div>
     </div>
   );
 }

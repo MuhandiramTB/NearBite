@@ -33,6 +33,16 @@ export class MediaService {
     // RLS photo_write ensures only owner/admin can actually delete.
     return this.repo.deletePhoto(photoId);
   }
+
+  async listPhotos(actor: Actor, businessId: string) {
+    requireOwner(actor);
+    return this.repo.listPhotos(businessId);
+  }
+
+  async reorder(actor: Actor, businessId: string, photoIds: string[]) {
+    requireOwner(actor);
+    return this.repo.reorder(businessId, photoIds);
+  }
 }
 
 // Small deterministic-ish randomness without Node crypto types in core.

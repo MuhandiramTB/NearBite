@@ -1,9 +1,9 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { createSupabaseBrowser } from '@/lib/supabase/client';
 import { apiGet, apiSend } from '@/lib/ui/api-client';
-import { CONVENIENCE, FACILITIES, VISIT_PURPOSES } from '@nearbite/contracts';
+import { CONVENIENCE, CURRENCIES, FACILITIES, VISIT_PURPOSES } from '@nearbite/contracts';
 import { attrLabel, freshness, liveLabel } from '@/lib/ui/format';
 import { useSession } from '@/lib/ui/use-session';
 
@@ -408,7 +408,8 @@ function ListingRow({
 
       <div className="row" style={{ marginTop: 12, gap: 20, alignItems: 'flex-start' }}>
         <OfferManager businessId={b.id} onError={onError} />
-        <PhotoUpload businessId={b.id} onError={onError} onDone={onChange} />
+        <PhotoGallery businessId={b.id} onError={onError} onDone={onChange} />
+        <BusinessSettings businessId={b.id} onError={onError} />
       </div>
     </div>
   );
@@ -478,7 +479,11 @@ function OfferManager({ businessId, onError }: { businessId: string; onError: (s
   );
 }
 
-function PhotoUpload({
+type OwnerPhoto = { id: string; url: string | null; kind: string; sortOrder: number };
+const MAX_MB = 5;
+const OK_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
+
+function PhotoGallery({
   businessId,
   onError,
   onDone,
@@ -487,43 +492,219 @@ function PhotoUpload({
   onError: (s: string) => void;
   onDone: () => void;
 }) {
-  const [busy, setBusy] = useState(false);
-  const [msg, setMsg] = useState('');
+  const [open, setOpen] = useState(false);
+  const [photos, setPhotos] = useState<OwnerPhoto[]>([]);
+  const [progress, setProgress] = useState<number | null>(null);
+  const [dragOver, setDragOver] = useState(false);
+  const dragIndex = useRef<number | null>(null);
 
-  async function onFile(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setBusy(true);
-    setMsg('');
+  const load = useCallback(() => {
+    apiGet<{ data: OwnerPhoto[] }>(`/businesses/${businessId}/photos`)
+      .then((r) => setPhotos(r.data))
+      .catch(() => {});
+  }, [businessId]);
+  useEffect(() => {
+    if (open) load();
+  }, [open, load]);
+
+  async function uploadFiles(files: FileList | File[]) {
+    const list = Array.from(files);
+    for (const file of list) {
+      if (!OK_TYPES.includes(file.type)) {
+        onError(`"${file.name}" — only JPG, PNG, or WebP allowed.`);
+        continue;
+      }
+      if (file.size > MAX_MB * 1024 * 1024) {
+        onError(`"${file.name}" — max ${MAX_MB}MB.`);
+        continue;
+      }
+      setProgress(10);
+      try {
+        const { path, token } = await apiSend<{ path: string; token: string }>(
+          'POST',
+          `/businesses/${businessId}/photos/upload-url`,
+          { filename: file.name },
+        );
+        setProgress(45);
+        const supabase = createSupabaseBrowser();
+        const up = await supabase.storage.from('business-photos').uploadToSignedUrl(path, token, file);
+        if (up.error) throw up.error;
+        setProgress(80);
+        await apiSend('POST', `/businesses/${businessId}/photos`, { storagePath: path, kind: 'food' });
+        setProgress(100);
+      } catch (e) {
+        onError(String((e as Error).message));
+      }
+    }
+    setProgress(null);
+    load();
+    onDone();
+  }
+
+  async function remove(id: string) {
     try {
-      // 1) get signed upload URL
-      const { path, token } = await apiSend<{ path: string; token: string }>(
-        'POST',
-        `/businesses/${businessId}/photos/upload-url`,
-        { filename: file.name },
-      );
-      // 2) upload bytes via the browser Supabase client
-      const supabase = createSupabaseBrowser();
-      const up = await supabase.storage.from('business-photos').uploadToSignedUrl(path, token, file);
-      if (up.error) throw up.error;
-      // 3) register the photo
-      await apiSend('POST', `/businesses/${businessId}/photos`, { storagePath: path, kind: 'food' });
-      setMsg('Photo added ✓');
+      await apiSend('DELETE', `/photos/${id}`);
+      setPhotos((cur) => cur.filter((p) => p.id !== id));
       onDone();
     } catch (e) {
       onError(String((e as Error).message));
-    } finally {
-      setBusy(false);
+    }
+  }
+
+  async function persistOrder(next: OwnerPhoto[]) {
+    setPhotos(next);
+    try {
+      await apiSend('PUT', `/businesses/${businessId}/photos/order`, {
+        photoIds: next.map((p) => p.id),
+      });
+    } catch (e) {
+      onError(String((e as Error).message));
+    }
+  }
+
+  function move(from: number, to: number) {
+    if (to < 0 || to >= photos.length || from === to) return;
+    const next = [...photos];
+    const [item] = next.splice(from, 1);
+    next.splice(to, 0, item!);
+    persistOrder(next);
+  }
+
+  return (
+    <div style={{ flex: 1, minWidth: 240 }}>
+      <button className="btn btn-sm" onClick={() => setOpen((v) => !v)}>
+        {open ? 'Hide photos' : '📷 Photos'}
+      </button>
+      {open && (
+        <div className="stack" style={{ marginTop: 10, gap: 10 }}>
+          {/* drop zone */}
+          <label
+            className={`dropzone ${dragOver ? 'over' : ''}`}
+            onDragOver={(e) => {
+              e.preventDefault();
+              setDragOver(true);
+            }}
+            onDragLeave={() => setDragOver(false)}
+            onDrop={(e) => {
+              e.preventDefault();
+              setDragOver(false);
+              if (e.dataTransfer.files.length) uploadFiles(e.dataTransfer.files);
+            }}
+          >
+            <input
+              type="file"
+              accept="image/*"
+              multiple
+              hidden
+              onChange={(e) => e.target.files && uploadFiles(e.target.files)}
+            />
+            <span>📤 Drag & drop images here, or click to choose</span>
+            <span className="muted" style={{ fontSize: 12 }}>JPG / PNG / WebP · max {MAX_MB}MB</span>
+          </label>
+
+          {progress !== null && (
+            <div style={{ height: 6, background: 'var(--surface-2)', borderRadius: 3, overflow: 'hidden' }}>
+              <div style={{ width: `${progress}%`, height: '100%', background: 'var(--brand)', transition: 'width .2s' }} />
+            </div>
+          )}
+
+          {photos.length === 0 ? (
+            <p className="muted" style={{ fontSize: 13 }}>No photos yet.</p>
+          ) : (
+            <div className="gallery-grid">
+              {photos.map((p, i) => (
+                <div
+                  key={p.id}
+                  className="gallery-thumb"
+                  draggable
+                  onDragStart={() => (dragIndex.current = i)}
+                  onDragOver={(e) => e.preventDefault()}
+                  onDrop={() => {
+                    if (dragIndex.current !== null) move(dragIndex.current, i);
+                    dragIndex.current = null;
+                  }}
+                >
+                  {p.url && <img src={p.url} alt="" />}
+                  {i === 0 && <span className="cover-tag">Cover</span>}
+                  <div className="thumb-actions">
+                    <button className="thumb-btn" onClick={() => move(i, i - 1)} disabled={i === 0} aria-label="Move left">‹</button>
+                    <button className="thumb-btn" onClick={() => remove(p.id)} aria-label="Remove">🗑</button>
+                    <button className="thumb-btn" onClick={() => move(i, i + 1)} disabled={i === photos.length - 1} aria-label="Move right">›</button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function BusinessSettings({ businessId, onError }: { businessId: string; onError: (s: string) => void }) {
+  const [open, setOpen] = useState(false);
+  const [currency, setCurrency] = useState('LKR');
+  const [facilities, setFacilities] = useState<string[]>([]);
+  const [purposes, setPurposes] = useState<string[]>([]);
+  const [convenience, setConvenience] = useState<string[]>([]);
+  const [saved, setSaved] = useState(false);
+
+  useEffect(() => {
+    if (!open) return;
+    apiGet<{
+      currency: string | null;
+      facilities: string[];
+      visitPurposes: string[];
+      convenience: string[];
+    }>(`/businesses/${businessId}`)
+      .then((d) => {
+        setCurrency(d.currency ?? 'LKR');
+        setFacilities(d.facilities ?? []);
+        setPurposes(d.visitPurposes ?? []);
+        setConvenience(d.convenience ?? []);
+      })
+      .catch(() => {});
+  }, [open, businessId]);
+
+  async function save() {
+    setSaved(false);
+    try {
+      await apiSend('PUT', `/businesses/${businessId}/settings`, {
+        currency,
+        facilities,
+        visitPurposes: purposes,
+        convenience,
+      });
+      setSaved(true);
+    } catch (e) {
+      onError(String((e as Error).message));
     }
   }
 
   return (
-    <div style={{ flex: 1, minWidth: 200 }}>
-      <label className="btn btn-sm" style={{ cursor: 'pointer' }}>
-        {busy ? 'Uploading…' : '📷 Add photo'}
-        <input type="file" accept="image/*" hidden onChange={onFile} disabled={busy} />
-      </label>
-      {msg && <span className="notice" style={{ marginLeft: 8, fontSize: 13 }}>{msg}</span>}
+    <div style={{ flex: 1, minWidth: 240 }}>
+      <button className="btn btn-sm" onClick={() => setOpen((v) => !v)}>
+        {open ? 'Hide settings' : '⚙ Settings'}
+      </button>
+      {open && (
+        <div className="stack" style={{ marginTop: 10, gap: 12 }}>
+          <div>
+            <span className="label">Currency</span>
+            <select className="select" style={{ maxWidth: 140 }} value={currency} onChange={(e) => setCurrency(e.target.value)}>
+              {CURRENCIES.map((c) => (
+                <option key={c} value={c}>{c}</option>
+              ))}
+            </select>
+          </div>
+          <AttrPicker label="Good for" options={VISIT_PURPOSES} selected={purposes} onChange={setPurposes} />
+          <AttrPicker label="Facilities & dining" options={FACILITIES} selected={facilities} onChange={setFacilities} />
+          <AttrPicker label="Convenience" options={CONVENIENCE} selected={convenience} onChange={setConvenience} />
+          <div className="row">
+            <button className="btn btn-sm btn-primary" onClick={save}>Save settings</button>
+            {saved && <span className="notice" style={{ fontSize: 13 }}>Saved ✓</span>}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

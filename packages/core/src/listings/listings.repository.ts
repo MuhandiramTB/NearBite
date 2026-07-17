@@ -52,6 +52,24 @@ export class ListingsRepository {
     return data ?? null;
   }
 
+  async updateSettings(
+    id: string,
+    currency: string,
+    facilities: string[],
+    visitPurposes: string[],
+    convenience: string[],
+  ) {
+    const { error } = await this.db.rpc('update_business_settings', {
+      p_business_id: id,
+      p_currency: currency,
+      p_facilities: facilities,
+      p_visit_purposes: visitPurposes,
+      p_convenience: convenience,
+    });
+    if (error) throw Errors.validation(error.message);
+    return { ok: true };
+  }
+
   async setLiveStatus(id: string, live: 'open' | 'closed' | 'busy') {
     // The freshness trigger stamps last_owner_update_at on this update.
     const { data, error } = await this.db

@@ -60,6 +60,7 @@ export const businesses = pgTable(
     location: geographyPoint('location').notNull(),
     phone: text('phone'),
     priceTier: smallint('price_tier'),
+    currency: text('currency').default('LKR'),
     isVegFriendly: boolean('is_veg_friendly').default(false),
     // Rich attributes — many-valued tags (GIN-indexed for @>/&& filtering).
     facilities: text('facilities').array().default([]), // ac, parking, wifi, rooftop, sea_view…
@@ -107,6 +108,7 @@ export const photos = pgTable(
       .references(() => businesses.id, { onDelete: 'cascade' }),
     storagePath: text('storage_path').notNull(),
     kind: text('kind').default('venue'),
+    sortOrder: integer('sort_order').default(0),
     uploadedBy: uuid('uploaded_by').references(() => profiles.id),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },

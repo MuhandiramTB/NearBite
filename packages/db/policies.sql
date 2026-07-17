@@ -27,6 +27,9 @@ alter table businesses add column if not exists rating_service numeric(2,1) defa
 alter table businesses add column if not exists rating_value numeric(2,1) default 0;
 alter table businesses add column if not exists rating_cleanliness numeric(2,1) default 0;
 
+alter table photos add column if not exists sort_order integer default 0;
+alter table businesses add column if not exists currency text default 'LKR';
+
 create table if not exists notifications (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references profiles(id) on delete cascade,
@@ -547,6 +550,41 @@ begin
   );
 end $$;
 
+-- reorder_photos: set sort_order for an owner's photos (owner/admin only via RLS
+-- on the underlying update; guarded by ownership of the parent business).
+create or replace function reorder_photos(p_business_id uuid, p_photo_ids uuid[])
+returns void
+language plpgsql security definer set search_path = public as $$
+declare owns boolean; i int;
+begin
+  select exists(select 1 from businesses b where b.id = p_business_id
+                and (b.owner_id = auth.uid() or is_admin())) into owns;
+  if not owns then raise exception 'not allowed'; end if;
+  for i in 1 .. array_length(p_photo_ids, 1) loop
+    update photos set sort_order = i where id = p_photo_ids[i] and business_id = p_business_id;
+  end loop;
+end $$;
+
+-- update_business_settings: currency + attributes without forcing re-review.
+create or replace function update_business_settings(
+  p_business_id uuid, p_currency text,
+  p_facilities text[], p_visit_purposes text[], p_convenience text[]
+) returns void
+language plpgsql security definer set search_path = public as $$
+begin
+  if not exists(select 1 from businesses b where b.id = p_business_id
+                and (b.owner_id = auth.uid() or is_admin())) then
+    raise exception 'not allowed';
+  end if;
+  update businesses set
+    currency = coalesce(p_currency, currency),
+    facilities = coalesce(p_facilities, facilities),
+    visit_purposes = coalesce(p_visit_purposes, visit_purposes),
+    convenience = coalesce(p_convenience, convenience),
+    last_owner_update_at = now()
+  where id = p_business_id;
+end $$;
+
 -- become_owner: let a signed-in consumer self-upgrade to 'owner' so they can
 -- create listings (self-serve business signup, FR-1.1). Cannot grant 'admin'.
 -- SECURITY DEFINER to bypass the profiles role-escalation guard for THIS path
@@ -571,7 +609,7 @@ language sql stable security invoker set search_path = public, extensions as $$
     'description', b.description, 'descriptionLang', b.description_lang,
     'address', b.address,
     'lat', ST_Y(b.location::geometry), 'lng', ST_X(b.location::geometry),
-    'phone', b.phone, 'isVegFriendly', b.is_veg_friendly,
+    'phone', b.phone, 'isVegFriendly', b.is_veg_friendly, 'currency', b.currency,
     'facilities', to_jsonb(coalesce(b.facilities, '{}')),
     'visitPurposes', to_jsonb(coalesce(b.visit_purposes, '{}')),
     'convenience', to_jsonb(coalesce(b.convenience, '{}')),
@@ -588,7 +626,8 @@ language sql stable security invoker set search_path = public, extensions as $$
         'isVeg', mi.is_veg, 'section', mi.section) order by mi.sort_order)
       from menu_items mi where mi.business_id = b.id), '[]'::jsonb),
     'photos', coalesce((select jsonb_agg(jsonb_build_object(
-        'id', p.id, 'storagePath', p.storage_path, 'kind', p.kind) order by p.created_at)
+        'id', p.id, 'storagePath', p.storage_path, 'kind', p.kind)
+        order by p.sort_order, p.created_at)
       from photos p where p.business_id = b.id), '[]'::jsonb),
     'offers', coalesce((select jsonb_agg(jsonb_build_object(
         'id', o.id, 'title', o.title, 'description', o.description,

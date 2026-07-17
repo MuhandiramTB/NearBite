@@ -94,3 +94,17 @@ export type UpdateBusiness = z.infer<typeof UpdateBusiness>;
 
 export const SetLiveStatus = z.object({ live: LiveStatus });
 export type SetLiveStatus = z.infer<typeof SetLiveStatus>;
+
+export const CURRENCIES = ['LKR', 'USD', 'EUR', 'GBP', 'INR'] as const;
+
+export const UpdateSettings = z.object({
+  currency: z.enum(CURRENCIES),
+  facilities: z.array(z.string()).default([]),
+  visitPurposes: z.array(z.string()).default([]),
+  convenience: z.array(z.string()).default([]),
+});
+export type UpdateSettings = z.infer<typeof UpdateSettings>;
+
+/** Photo reorder payload. */
+export const ReorderPhotos = z.object({ photoIds: z.array(z.string().uuid()) });
+export type ReorderPhotos = z.infer<typeof ReorderPhotos>;
