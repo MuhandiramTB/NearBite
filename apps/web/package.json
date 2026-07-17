@@ -19,7 +19,9 @@
     "next": "^15.1.4",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
-    "zod": "^3.24.1"
+    "zod": "^3.24.1",
+    "leaflet": "^1.9.4",
+    "react-leaflet": "^4.2.1"
   },
   "devDependencies": {
     "@nearbite/config": "workspace:*",
@@ -28,6 +30,7 @@
     "@types/react-dom": "19.0.4",
     "eslint": "^9.18.0",
     "eslint-config-next": "^15.1.4",
-    "typescript": "^5.7.3"
+    "typescript": "^5.7.3",
+    "@types/leaflet": "^1.9.12"
   }
 }

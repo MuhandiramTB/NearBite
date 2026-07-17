@@ -85,8 +85,9 @@ export class SearchRepository {
   }
 
   async cities() {
-    const { data, error } = await this.db.from('cities').select('id,name,is_active');
+    // center lat/lng come from a small RPC (PostGIS geography → numbers).
+    const { data, error } = await this.db.rpc('list_cities');
     if (error) throw Errors.validation(error.message);
-    return data ?? [];
+    return (data ?? []) as { id: string; name: string; lat: number | null; lng: number | null }[];
   }
 }

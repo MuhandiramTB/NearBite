@@ -11,13 +11,14 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Link } from 'expo-router';
-import { type Card, distanceLabel, freshness, getPilotCityId, search } from '@/lib/data';
+import { type Card, type Loc, distanceLabel, freshness, getPilotCity, getUserLocation, search } from '@/lib/data';
 
 const LIVE_COLORS: Record<string, string> = { open: '#1f9d55', busy: '#d9822b', closed: '#9a8d80' };
 
 export default function SearchScreen() {
   const insets = useSafeAreaInsets();
   const [cityId, setCityId] = useState<string | null>(null);
+  const [loc, setLoc] = useState<Loc | null>(null);
   const [q, setQ] = useState('');
   const [vegOnly, setVegOnly] = useState(false);
   const [items, setItems] = useState<Card[]>([]);
@@ -29,12 +30,12 @@ export default function SearchScreen() {
   const filtersRef = useRef(filters);
   filtersRef.current = filters;
 
-  const run = useCallback(async (city: string) => {
+  const run = useCallback(async (city: string, location: Loc) => {
     setLoading(true);
     setError('');
     try {
       const { q: cq, vegOnly: cv } = filtersRef.current;
-      setItems(await search(city, { q: cq || undefined, vegOnly: cv }));
+      setItems(await search(city, location, { q: cq || undefined, vegOnly: cv }));
     } catch (e) {
       setError(String((e as Error).message));
     } finally {
@@ -44,11 +45,15 @@ export default function SearchScreen() {
 
   useEffect(() => {
     let active = true;
-    getPilotCityId().then((id) => {
-      if (!active) return;
-      setCityId(id);
-      if (id) run(id);
-    });
+    (async () => {
+      const city = await getPilotCity();
+      if (!active || !city) return;
+      setCityId(city.id);
+      const location = await getUserLocation(city.center);
+      if (!active || !location) return;
+      setLoc(location);
+      run(city.id, location);
+    })();
     return () => {
       active = false;
     };
@@ -64,7 +69,7 @@ export default function SearchScreen() {
         placeholder="Search a dish or place…"
         value={q}
         onChangeText={setQ}
-        onSubmitEditing={() => cityId && run(cityId)}
+        onSubmitEditing={() => cityId && loc && run(cityId, loc)}
         returnKeyType="search"
       />
       <View style={styles.filterRow}>
@@ -73,7 +78,7 @@ export default function SearchScreen() {
           onPress={() => {
             const v = !vegOnly;
             setVegOnly(v);
-            if (cityId) setTimeout(() => run(cityId), 0);
+            if (cityId && loc) setTimeout(() => run(cityId, loc), 0);
           }}
         >
           <Text style={[styles.chipText, vegOnly && styles.chipTextOn]}>🌱 Veg</Text>
@@ -95,7 +100,7 @@ export default function SearchScreen() {
           keyExtractor={(b) => b.id}
           contentContainerStyle={{ paddingBottom: insets.bottom + 24 }}
           refreshControl={
-            <RefreshControl refreshing={loading} onRefresh={() => cityId && run(cityId)} />
+            <RefreshControl refreshing={loading} onRefresh={() => cityId && loc && run(cityId, loc)} />
           }
           ListEmptyComponent={<Text style={styles.empty}>No places found. Try another search.</Text>}
           renderItem={({ item: b }) => (

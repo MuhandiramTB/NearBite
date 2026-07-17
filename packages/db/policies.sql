@@ -585,6 +585,22 @@ begin
   where id = p_business_id;
 end $$;
 
+-- Seed the pilot city's center (city metadata, used only as a fallback when the
+-- user declines location sharing). Set once if missing.
+update cities
+  set center = ST_SetSRID(ST_MakePoint(79.8612, 6.9271), 4326)::geography
+  where center is null;
+
+-- list_cities: cities with center lat/lng for the client fallback.
+create or replace function list_cities()
+returns table (id uuid, name text, lat double precision, lng double precision)
+language sql stable security invoker set search_path = public, extensions as $$
+  select id, name,
+    case when center is null then null else ST_Y(center::geometry) end,
+    case when center is null then null else ST_X(center::geometry) end
+  from cities order by name;
+$$;
+
 -- become_owner: let a signed-in consumer self-upgrade to 'owner' so they can
 -- create listings (self-serve business signup, FR-1.1). Cannot grant 'admin'.
 -- SECURITY DEFINER to bypass the profiles role-escalation guard for THIS path

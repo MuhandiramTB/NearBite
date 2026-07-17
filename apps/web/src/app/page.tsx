@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { CONVENIENCE, FACILITIES, VISIT_PURPOSES } from '@nearbite/contracts';
 import { apiGet } from '@/lib/ui/api-client';
 import { attrLabel, cuisineEmoji, distance, freshness, liveLabel, priceTier } from '@/lib/ui/format';
+import { useGeolocation } from '@/lib/ui/use-geolocation';
 
 type Card = {
   id: string;
@@ -18,14 +19,15 @@ type Card = {
   lastUpdatedAt: string;
 };
 type Category = { id: string; slug: string; i18n: { en: string } };
-type City = { id: string };
+type City = { id: string; name: string; lat: number | null; lng: number | null };
 
-const DEFAULT = { lat: 6.9344, lng: 79.8428 }; // Colombo Fort (pilot)
 type View = 'grid' | 'list';
 
 export default function DiscoverPage() {
   const [cats, setCats] = useState<Category[]>([]);
   const [cityId, setCityId] = useState('');
+  const [cityCenter, setCityCenter] = useState<{ lat: number; lng: number } | null>(null);
+  const geo = useGeolocation(cityCenter);
   const [category, setCategory] = useState('');
   const [maxPrice, setMaxPrice] = useState('');
   const [vegOnly, setVegOnly] = useState(false);
@@ -47,18 +49,22 @@ export default function DiscoverPage() {
     Promise.all([apiGet<{ data: City[] }>('/cities'), apiGet<{ data: Category[] }>('/categories')])
       .then(([c, k]) => {
         setCats(k.data);
-        if (c.data[0]) setCityId(c.data[0].id);
+        const city = c.data[0];
+        if (city) {
+          setCityId(city.id);
+          if (city.lat != null && city.lng != null) setCityCenter({ lat: city.lat, lng: city.lng });
+        }
       })
       .catch((e) => setError(String(e.message)));
   }, []);
 
   const runSearch = useCallback(async () => {
-    if (!cityId) return;
+    if (!cityId || geo.lat == null || geo.lng == null) return;
     setLoading(true);
     setError('');
     const p = new URLSearchParams({
-      lat: String(DEFAULT.lat),
-      lng: String(DEFAULT.lng),
+      lat: String(geo.lat),
+      lng: String(geo.lng),
       cityId,
       radiusM: radius,
       sort,
@@ -80,11 +86,11 @@ export default function DiscoverPage() {
     } finally {
       setLoading(false);
     }
-  }, [cityId, category, maxPrice, vegOnly, openNow, minRating, radius, facilities, purposes, convenience, sort, q]);
+  }, [cityId, geo.lat, geo.lng, category, maxPrice, vegOnly, openNow, minRating, radius, facilities, purposes, convenience, sort, q]);
 
   useEffect(() => {
-    if (cityId) void runSearch();
-  }, [cityId, runSearch]);
+    if (cityId && geo.lat != null) void runSearch();
+  }, [cityId, geo.lat, runSearch]);
 
   // Featured rails computed client-side from the result set.
   const rails = useMemo(() => {
@@ -110,7 +116,23 @@ export default function DiscoverPage() {
     <div className="stack" style={{ gap: 4 }}>
       {/* Hero */}
       <section className="hero">
-        <p className="eyebrow">📍 Colombo pilot</p>
+        <p className="eyebrow">
+          {geo.status === 'granted' ? (
+            '📍 Using your location'
+          ) : geo.status === 'locating' ? (
+            '📍 Finding you…'
+          ) : (
+            <>
+              📍 Location off —{' '}
+              <button
+                onClick={geo.request}
+                style={{ border: 'none', background: 'none', color: 'var(--brand)', cursor: 'pointer', font: 'inherit', padding: 0, textDecoration: 'underline' }}
+              >
+                use my location
+              </button>
+            </>
+          )}
+        </p>
         <h1 className="h1">Find where to eat — menus you can trust.</h1>
         <p className="lead" style={{ marginTop: 10 }}>
           Real prices, real photos, live open/busy status — kept fresh by the owners themselves.

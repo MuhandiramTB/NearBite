@@ -1,3 +1,4 @@
+import * as Location from 'expo-location';
 import { supabase } from './supabase';
 
 /** Data access for the mobile app — same RPCs the web uses, called directly
@@ -15,18 +16,35 @@ export type Card = {
   last_updated_at: string;
 };
 
-// Colombo Fort (pilot default). A real build would use expo-location.
-export const DEFAULT_LOC = { lat: 6.9344, lng: 79.8428 };
+export type Loc = { lat: number; lng: number };
 
-export async function getPilotCityId(): Promise<string | null> {
-  const { data } = await supabase.from('cities').select('id').limit(1).maybeSingle();
-  return (data?.id as string) ?? null;
+/** Pilot city id + its center (fallback location if the user denies GPS). */
+export async function getPilotCity(): Promise<{ id: string; center: Loc | null } | null> {
+  const { data: cities } = await supabase.rpc('list_cities');
+  const first = (cities ?? [])[0] as { id: string; lat: number | null; lng: number | null } | undefined;
+  if (!first) return null;
+  return {
+    id: first.id,
+    center: first.lat != null && first.lng != null ? { lat: first.lat, lng: first.lng } : null,
+  };
 }
 
-export async function search(cityId: string, opts: { q?: string; vegOnly?: boolean } = {}) {
+/** Real device location via expo-location; falls back to the given city center. */
+export async function getUserLocation(fallback: Loc | null): Promise<Loc | null> {
+  try {
+    const { status } = await Location.requestForegroundPermissionsAsync();
+    if (status !== 'granted') return fallback;
+    const pos = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+    return { lat: pos.coords.latitude, lng: pos.coords.longitude };
+  } catch {
+    return fallback;
+  }
+}
+
+export async function search(cityId: string, loc: Loc, opts: { q?: string; vegOnly?: boolean } = {}) {
   const { data, error } = await supabase.rpc('search_businesses', {
-    p_lat: DEFAULT_LOC.lat,
-    p_lng: DEFAULT_LOC.lng,
+    p_lat: loc.lat,
+    p_lng: loc.lng,
     p_radius_m: 10000,
     p_city_id: cityId,
     p_q: opts.q ?? null,

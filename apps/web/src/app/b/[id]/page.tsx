@@ -4,7 +4,10 @@ import { use, useCallback, useEffect, useState } from 'react';
 import { apiGet, apiSend } from '@/lib/ui/api-client';
 import { attrLabel, cuisineEmoji, freshness, liveLabel, priceTier } from '@/lib/ui/format';
 import { useAuthGate } from '@/lib/auth/auth-gate';
+import dynamic from 'next/dynamic';
 import { getDirections, openInMaps } from '@/lib/ui/maps';
+
+const MapView = dynamic(() => import('@/lib/ui/MapView').then((m) => m.MapView), { ssr: false });
 
 type Detail = {
   id: string;
@@ -245,6 +248,15 @@ export default function DetailPage({ params }: { params: Promise<{ id: string }>
           </div>
         </div>
       )}
+
+      <div>
+        <h2 className="h2">Location</h2>
+        <MapView lat={d.lat} lng={d.lng} label={d.name} />
+        <div className="row" style={{ marginTop: 10 }}>
+          <button className="btn btn-sm" onClick={() => openInMaps(d.lat, d.lng, d.name)}>Open in Maps</button>
+          <button className="btn btn-sm btn-primary" onClick={() => getDirections(d.lat, d.lng)}>Get directions</button>
+        </div>
+      </div>
 
       <Reviews businessId={id} onPosted={loadDetail} requireAuth={requireAuth} />
 

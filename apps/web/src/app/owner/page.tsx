@@ -1,7 +1,13 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import dynamic from 'next/dynamic';
 import { createSupabaseBrowser } from '@/lib/supabase/client';
+
+const LocationPicker = dynamic(
+  () => import('@/lib/ui/LocationPicker').then((m) => m.LocationPicker),
+  { ssr: false },
+);
 import { apiGet, apiSend } from '@/lib/ui/api-client';
 import { CONVENIENCE, CURRENCIES, FACILITIES, VISIT_PURPOSES } from '@nearbite/contracts';
 import { attrLabel, freshness, liveLabel } from '@/lib/ui/format';
@@ -282,6 +288,7 @@ function CreateListing({
   const [cityId, setCityId] = useState('');
   const [priceTier, setPriceTier] = useState('2');
   const [address, setAddress] = useState('');
+  const [loc, setLoc] = useState<{ lat: number; lng: number } | null>(null);
   const [facilities, setFacilities] = useState<string[]>([]);
   const [purposes, setPurposes] = useState<string[]>([]);
   const [convenience, setConvenience] = useState<string[]>([]);
@@ -293,6 +300,10 @@ function CreateListing({
   }, [cities, cats, cityId, categoryId]);
 
   async function submit() {
+    if (!loc) {
+      onError('Please set your location on the map before publishing.');
+      return;
+    }
     setBusy(true);
     onError('');
     try {
@@ -302,8 +313,8 @@ function CreateListing({
         cityId,
         priceTier: Number(priceTier),
         address,
-        lat: 6.9344,
-        lng: 79.8428,
+        lat: loc.lat,
+        lng: loc.lng,
         isVegFriendly: false,
         descriptionLang: 'en',
         facilities,
@@ -312,6 +323,7 @@ function CreateListing({
       });
       setName('');
       setAddress('');
+      setLoc(null);
       setFacilities([]);
       setPurposes([]);
       setConvenience([]);
@@ -345,11 +357,21 @@ function CreateListing({
           <option value="4">$$$$</option>
         </select>
       </div>
-      <input className="input" placeholder="Address" value={address} onChange={(e) => setAddress(e.target.value)} />
+      <input className="input" placeholder="Address (auto-fills from the map)" value={address} onChange={(e) => setAddress(e.target.value)} />
+      <div>
+        <span className="label">Business location — required</span>
+        <LocationPicker
+          value={loc}
+          onChange={(p) => {
+            setLoc({ lat: p.lat, lng: p.lng });
+            if (p.address) setAddress(p.address);
+          }}
+        />
+      </div>
       <AttrPicker label="Good for" options={VISIT_PURPOSES} selected={purposes} onChange={setPurposes} />
       <AttrPicker label="Facilities" options={FACILITIES} selected={facilities} onChange={setFacilities} />
       <AttrPicker label="Convenience" options={CONVENIENCE} selected={convenience} onChange={setConvenience} />
-      <button className="btn btn-primary" onClick={submit} disabled={busy || !name || !categoryId}>
+      <button className="btn btn-primary" onClick={submit} disabled={busy || !name || !categoryId || !loc}>
         {busy ? 'Creating…' : 'Create (goes to review)'}
       </button>
     </div>
