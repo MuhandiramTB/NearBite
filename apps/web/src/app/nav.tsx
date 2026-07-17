@@ -1,12 +1,18 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { LANGS } from '@/lib/i18n/dict';
-import { useI18n } from '@/lib/i18n';
 import { apiGet, apiSend } from '@/lib/ui/api-client';
 import { useSession } from '@/lib/ui/use-session';
+import { useTheme } from '@/lib/ui/theme';
 
-type Notif = { id: string; title: string; body: string | null; link: string | null; isRead: boolean; createdAt: string };
+type Notif = {
+  id: string;
+  title: string;
+  body: string | null;
+  link: string | null;
+  isRead: boolean;
+  createdAt: string;
+};
 
 function NotificationBell() {
   const session = useSession();
@@ -64,8 +70,16 @@ function NotificationBell() {
   );
 }
 
+function ThemeToggle() {
+  const { theme, toggle } = useTheme();
+  return (
+    <button className="btn btn-sm" onClick={toggle} aria-label="Toggle theme" title="Toggle light/dark">
+      {theme === 'dark' ? '☀️' : '🌙'}
+    </button>
+  );
+}
+
 export function Nav() {
-  const { lang, setLang, t } = useI18n();
   const session = useSession();
   const isAdmin = session.role === 'admin';
   const isOwner = session.role === 'owner' || isAdmin;
@@ -75,27 +89,14 @@ export function Nav() {
         <a href="/" className="brand">
           Near<span>Bite</span>
         </a>
-        <a href="/">{t('nav.discover')}</a>
-        {isOwner && <a href="/owner">{t('nav.myBusiness')}</a>}
-        {/* Admin is intentionally NOT in public nav (spec §7); reachable via /admin/login */}
-        {isAdmin && <a href="/admin">{t('nav.admin')}</a>}
-        {!session.userId && <a href="/signin">{t('nav.signin')}</a>}
-        <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 12 }}>
+        <a href="/">Discover</a>
+        {isOwner && <a href="/owner">My Business</a>}
+        {isAdmin && <a href="/admin">Admin</a>}
+        {!session.userId && <a href="/signin">Sign in</a>}
+        <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 10 }}>
           <NotificationBell />
+          <ThemeToggle />
         </div>
-        <select
-          aria-label="Language"
-          className="select"
-          style={{ width: 'auto', padding: '6px 10px' }}
-          value={lang}
-          onChange={(e) => setLang(e.target.value as typeof lang)}
-        >
-          {LANGS.map((l) => (
-            <option key={l.code} value={l.code}>
-              {l.label}
-            </option>
-          ))}
-        </select>
       </div>
     </nav>
   );

@@ -299,6 +299,88 @@ a {
   font-size: 13px;
 }
 
+/* ---- category chips (horizontal scroll) ---- */
+.chip-scroll {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  margin-top: 16px;
+  padding-bottom: 4px;
+  scrollbar-width: none;
+}
+.chip-scroll::-webkit-scrollbar {
+  display: none;
+}
+.cat-chip {
+  flex: none;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--ink-soft);
+  border-radius: 999px;
+  padding: 8px 14px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.12s;
+}
+.cat-chip:hover {
+  border-color: var(--brand);
+}
+.cat-chip.on {
+  background: var(--brand);
+  color: var(--brand-ink);
+  border-color: transparent;
+}
+
+/* ---- view toggle segment ---- */
+.seg {
+  display: inline-flex;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+}
+.seg-btn {
+  border: none;
+  background: var(--surface);
+  color: var(--muted);
+  padding: 7px 12px;
+  cursor: pointer;
+  font-size: 15px;
+}
+.seg-btn.on {
+  background: var(--brand);
+  color: var(--brand-ink);
+}
+
+/* ---- pill (small stat) ---- */
+.pill {
+  display: inline-flex;
+  align-items: center;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  color: var(--ink-soft);
+}
+
+/* ---- featured rail (horizontal) ---- */
+.rail {
+  display: flex;
+  gap: 14px;
+  overflow-x: auto;
+  padding-bottom: 8px;
+  scrollbar-width: none;
+}
+.rail::-webkit-scrollbar {
+  display: none;
+}
+.rail-card {
+  flex: none;
+  width: 220px;
+}
+
 /* ---- cards ---- */
 .results {
   display: grid;
