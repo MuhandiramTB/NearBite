@@ -39,7 +39,17 @@ The wider vision below is the target; this table is the honest current state.
 | Admin user management (list/search, change role) | ✅ Done |
 | Report moderation (queue, dismiss, remove review / deactivate listing) | ✅ Done |
 | Owner notifications (listing status change, new review) | ✅ Done (in-app bell; email/push future) |
-| Trilingual UI (English / Sinhala / Tamil) | ✅ Done (dictionary + switcher, applied to key screens) |
+| Light / dark theme toggle | ✅ Done (persisted, respects OS preference) |
+| Modern Discover UI (hero, category chips, featured rails, grid/list, rich cards) | ✅ Done |
+| Advanced filters (budget, rating, distance, veg, open-now, facilities/purpose/convenience) | ✅ Done |
+| 3-role auth: guest browse, guest action-resume, hidden /admin/login, business→dashboard | ✅ Done |
+| Redesigned login/register (split layout, strength meter, toggles, social placeholders) | ✅ Done |
+| Image gallery management (previews, drag&drop upload, progress, remove, reorder, cover) | ✅ Done |
+| Business settings (currency LKR/USD/EUR/GBP/INR + facility toggles) | ✅ Done |
+| Detail sticky action bar (Call / Directions / Share / Save / Map) | ✅ Done |
+| Real geolocation (device position; city-center fallback, never hardcoded) | ✅ Done |
+| Interactive maps (Leaflet/OSM): owner location picker + reverse-geocode, customer map, deep-links | ✅ Done |
+| Mobile bottom nav, not-found + error pages, saved-places page | ✅ Done |
 | **Owner responds to reviews** | ✅ Done (owner inbox reply + shown on detail) |
 | **Facilities** (AC, parking, WiFi, rooftop, sea view, kids area, accessibility…) | ✅ Done (schema + filters + UI) |
 | **Visit purpose** (date, family, business, photo spot…) | ✅ Done (schema + filters + UI) |
@@ -142,6 +152,17 @@ pnpm typecheck && pnpm lint && pnpm test && pnpm build
 ### Demo accounts (created by the rich seed · password `Passw0rd!x`)
 - Consumers: `dinesh@nearbite.test`, `sanjana@nearbite.test`, `kasun@nearbite.test`, `priya@nearbite.test`
 - Owners: `amara@nearbite.test`, `nuwan@nearbite.test`, `fathima@nearbite.test`
+
+### Admin (hidden login — not linked in nav)
+Run `pnpm --filter @nearbite/db exec tsx src/ensure-admin.ts`, then sign in at **`/admin/login`**:
+- `admin@nearbite.com` / `NearBite@123`
+
+### Location & maps
+- Search uses the **device's real location** (Geolocation API / expo-location). If the user
+  declines, it falls back to the pilot **city center** — no coordinates are hardcoded.
+- Maps use **Leaflet + OpenStreetMap** (no API key). Owners set their location by clicking/
+  dragging a pin (reverse-geocoded via Nominatim); customers get a map + platform-aware
+  "Open in Maps" / "Get directions" deep-links (Google on Android/desktop, Apple Maps on iOS).
 
 ---
 
