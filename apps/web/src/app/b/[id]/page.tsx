@@ -2,7 +2,7 @@
 
 import { use, useCallback, useEffect, useState } from 'react';
 import { apiGet, apiSend } from '@/lib/ui/api-client';
-import { attrLabel, cuisineEmoji, freshness, liveLabel, priceTier } from '@/lib/ui/format';
+import { attrLabel, cuisineEmoji, cuisineGradient, freshness, liveLabel, priceTier } from '@/lib/ui/format';
 import { useAuthGate } from '@/lib/auth/auth-gate';
 import dynamic from 'next/dynamic';
 import { getDirections, openInMaps } from '@/lib/ui/maps';
@@ -103,8 +103,18 @@ export default function DetailPage({ params }: { params: Promise<{ id: string }>
           {d.photos.map((p) => p.url && <img key={p.id} src={p.url} alt={d.name} />)}
         </div>
       ) : (
-        <div className="card-media ph" style={{ borderRadius: 'var(--radius)', height: 200, aspectRatio: 'auto' }}>
-          <span style={{ fontSize: 64 }}>{cuisineEmoji(d.categorySlug)}</span>
+        <div
+          className="card-media ph"
+          style={
+            {
+              height: 240,
+              aspectRatio: 'auto',
+              ['--ph-a' as string]: cuisineGradient(d.categorySlug).a,
+              ['--ph-b' as string]: cuisineGradient(d.categorySlug).b,
+            } as React.CSSProperties
+          }
+        >
+          <span className="ph-emoji" style={{ fontSize: 72 }}>{cuisineEmoji(d.categorySlug)}</span>
         </div>
       )}
 

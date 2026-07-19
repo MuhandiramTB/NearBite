@@ -5,7 +5,7 @@ import { z } from 'zod';
 export const SearchQuery = z.object({
   lat: z.coerce.number(),
   lng: z.coerce.number(),
-  radiusM: z.coerce.number().max(20000).default(5000),
+  radiusM: z.coerce.number().max(50000).default(5000),
   cityId: z.string().uuid(),
   q: z.string().optional(),
   categoryId: z.string().uuid().optional(),

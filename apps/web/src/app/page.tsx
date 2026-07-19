@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { CONVENIENCE, FACILITIES, VISIT_PURPOSES } from '@nearbite/contracts';
 import { apiGet } from '@/lib/ui/api-client';
-import { attrLabel, cuisineEmoji, distance, freshness, liveLabel, priceTier } from '@/lib/ui/format';
+import { attrLabel, cuisineEmoji, cuisineGradient, distance, freshness, liveLabel, priceTier } from '@/lib/ui/format';
 import { useGeolocation } from '@/lib/ui/use-geolocation';
 
 type Card = {
@@ -244,11 +244,34 @@ export default function DiscoverPage() {
 
 /* ---------- cards ---------- */
 
-function Badges({ b }: { b: Card }) {
+function CardMedia({ b, overlayName = false }: { b: Card; overlayName?: boolean }) {
+  const g = cuisineGradient(b.categorySlug);
   return (
-    <div className="row" style={{ gap: 5, flexWrap: 'wrap' }}>
-      <span className={`live live-${b.live}`}>{liveLabel[b.live]}</span>
-      {b.reviewCount > 0 && <span className="pill">★ {b.avgRating}</span>}
+    <div
+      className={`card-media ${b.thumbnailUrl ? '' : 'ph'}`}
+      style={!b.thumbnailUrl ? ({ ['--ph-a' as string]: g.a, ['--ph-b' as string]: g.b } as React.CSSProperties) : undefined}
+    >
+      {b.thumbnailUrl ? (
+        <img src={b.thumbnailUrl} alt={b.name} />
+      ) : (
+        <span className="ph-emoji">{cuisineEmoji(b.categorySlug)}</span>
+      )}
+      <span className="badge-float">
+        <span className={`live live-${b.live}`}>{liveLabel[b.live]}</span>
+      </span>
+      {b.reviewCount > 0 && (
+        <span className="rating-float">
+          <b>★</b> {b.avgRating}
+        </span>
+      )}
+      {overlayName && (
+        <>
+          <div className="scrim" />
+          <div className="on-photo">
+            <div className="name">{b.name}</div>
+          </div>
+        </>
+      )}
     </div>
   );
 }
@@ -256,16 +279,10 @@ function Badges({ b }: { b: Card }) {
 function RestaurantCard({ b }: { b: Card }) {
   return (
     <a href={`/b/${b.id}`} className="card">
-      <div className={`card-media ${b.thumbnailUrl ? '' : 'ph'}`}>
-        {b.thumbnailUrl ? <img src={b.thumbnailUrl} alt={b.name} /> : <span>{cuisineEmoji(b.categorySlug)}</span>}
-        <span className={`live live-${b.live}`} style={{ position: 'absolute', top: 10, left: 10 }}>
-          {liveLabel[b.live]}
-        </span>
-      </div>
+      <CardMedia b={b} overlayName />
       <div className="card-body">
-        <span className="card-title">{b.name}</span>
         <div className="meta">
-          <span>{b.categorySlug ?? 'food'}</span>
+          <span style={{ textTransform: 'capitalize' }}>{b.categorySlug ?? 'food'}</span>
           <span className="dot" />
           <span className="price">{priceTier(b.priceTier)}</span>
           <span className="dot" />
@@ -273,36 +290,53 @@ function RestaurantCard({ b }: { b: Card }) {
           {b.reviewCount > 0 && (
             <>
               <span className="dot" />
-              <span>★ {b.avgRating} ({b.reviewCount})</span>
+              <span>{b.reviewCount} reviews</span>
             </>
           )}
         </div>
-        <span className="fresh">Updated {freshness(b.lastUpdatedAt)}</span>
+        <span className="fresh">Fresh · updated {freshness(b.lastUpdatedAt)}</span>
       </div>
     </a>
   );
 }
 
 function RestaurantRow({ b }: { b: Card }) {
+  const g = cuisineGradient(b.categorySlug);
   return (
-    <a href={`/b/${b.id}`} className="panel row" style={{ gap: 14, alignItems: 'center' }}>
+    <a href={`/b/${b.id}`} className="panel row" style={{ gap: 14, alignItems: 'center', cursor: 'pointer' }}>
       <div
         className={`card-media ${b.thumbnailUrl ? '' : 'ph'}`}
-        style={{ width: 96, height: 72, borderRadius: 10, flex: 'none', aspectRatio: 'auto' }}
+        style={
+          {
+            width: 104,
+            height: 78,
+            borderRadius: 10,
+            flex: 'none',
+            aspectRatio: 'auto',
+            ['--ph-a' as string]: g.a,
+            ['--ph-b' as string]: g.b,
+          } as React.CSSProperties
+        }
       >
-        {b.thumbnailUrl ? <img src={b.thumbnailUrl} alt={b.name} /> : <span style={{ fontSize: 28 }}>{cuisineEmoji(b.categorySlug)}</span>}
+        {b.thumbnailUrl ? <img src={b.thumbnailUrl} alt={b.name} /> : <span className="ph-emoji" style={{ fontSize: 30 }}>{cuisineEmoji(b.categorySlug)}</span>}
       </div>
       <div style={{ flex: 1, minWidth: 0 }}>
         <div className="row between">
-          <strong>{b.name}</strong>
-          <Badges b={b} />
+          <span className="card-title">{b.name}</span>
+          <span className={`live live-${b.live}`}>{liveLabel[b.live]}</span>
         </div>
         <div className="meta">
-          <span>{b.categorySlug ?? 'food'}</span>
+          <span style={{ textTransform: 'capitalize' }}>{b.categorySlug ?? 'food'}</span>
           <span className="dot" />
           <span className="price">{priceTier(b.priceTier)}</span>
           <span className="dot" />
           <span>{distance(b.distanceM)}</span>
+          {b.reviewCount > 0 && (
+            <>
+              <span className="dot" />
+              <span style={{ color: 'var(--gold)', fontWeight: 800 }}>★ {b.avgRating}</span>
+            </>
+          )}
         </div>
         <span className="fresh">Updated {freshness(b.lastUpdatedAt)}</span>
       </div>
@@ -318,21 +352,12 @@ function Rail({ title, items }: { title: string; items: Card[] }) {
       <div className="rail">
         {items.map((b) => (
           <a key={b.id} href={`/b/${b.id}`} className="card rail-card">
-            <div className={`card-media ${b.thumbnailUrl ? '' : 'ph'}`}>
-              {b.thumbnailUrl ? <img src={b.thumbnailUrl} alt={b.name} /> : <span>{cuisineEmoji(b.categorySlug)}</span>}
-            </div>
+            <CardMedia b={b} overlayName />
             <div className="card-body">
-              <span className="card-title">{b.name}</span>
               <div className="meta">
                 <span className="price">{priceTier(b.priceTier)}</span>
                 <span className="dot" />
                 <span>{distance(b.distanceM)}</span>
-                {b.reviewCount > 0 && (
-                  <>
-                    <span className="dot" />
-                    <span>★ {b.avgRating}</span>
-                  </>
-                )}
               </div>
             </div>
           </a>

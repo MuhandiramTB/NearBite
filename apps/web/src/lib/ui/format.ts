@@ -42,6 +42,19 @@ export const ATTR_LABELS: Record<string, string> = {
 };
 export const attrLabel = (k: string) => ATTR_LABELS[k] ?? k.replace(/_/g, ' ');
 
+/** Warm gradient stops per cuisine for the "no photo" card scene. */
+export function cuisineGradient(slug: string | null | undefined): { a: string; b: string } {
+  const map: Record<string, { a: string; b: string }> = {
+    'sri-lankan': { a: '#ff8a3d', b: '#d81f1f' },
+    cafe: { a: '#c98a4b', b: '#6b4423' },
+    chinese: { a: '#ff5e5e', b: '#a80f2e' },
+    indian: { a: '#ffb020', b: '#d8541f' },
+    bakery: { a: '#f0b46b', b: '#b5651d' },
+    'fast-food': { a: '#ffd23d', b: '#e0281a' },
+  };
+  return (slug && map[slug]) || { a: '#ff7a3d', b: '#e0281a' };
+}
+
 /** Emoji used for the gradient placeholder when a listing has no photo. */
 export function cuisineEmoji(slug: string | null | undefined): string {
   const map: Record<string, string> = {
