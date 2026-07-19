@@ -13,7 +13,6 @@
   "dependencies": {
     "@nearbite/contracts": "workspace:*",
     "@nearbite/core": "workspace:*",
-    "@nearbite/db": "workspace:*",
     "@supabase/ssr": "^0.5.2",
     "@supabase/supabase-js": "^2.47.10",
     "next": "^15.1.4",

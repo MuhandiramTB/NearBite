@@ -88,9 +88,6 @@ importers:
       '@nearbite/core':
         specifier: workspace:*
         version: link:../../packages/core
-      '@nearbite/db':
-        specifier: workspace:*
-        version: link:../../packages/db
       '@supabase/ssr':
         specifier: ^0.5.2
         version: 0.5.2(@supabase/supabase-js@2.110.5)
