@@ -11,6 +11,9 @@ export class SearchRepository {
 
   private publicUrl(path: string | null): string | null {
     if (!path) return null;
+    // Absolute URLs (e.g. seeded stock photos) pass through unchanged; storage
+    // keys are resolved to their public bucket URL.
+    if (path.startsWith('http://') || path.startsWith('https://')) return path;
     return this.db.storage.from(PHOTO_BUCKET).getPublicUrl(path).data.publicUrl;
   }
 

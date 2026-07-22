@@ -5,6 +5,7 @@ import { CONVENIENCE, FACILITIES, VISIT_PURPOSES } from '@nearbite/contracts';
 import { apiGet } from '@/lib/ui/api-client';
 import { attrLabel, cuisineEmoji, cuisineGradient, distance, freshness, liveLabel, priceTier } from '@/lib/ui/format';
 import { useGeolocation } from '@/lib/ui/use-geolocation';
+import { Icon } from '@/lib/ui/Icon';
 
 type Card = {
   id: string;
@@ -138,15 +139,18 @@ export default function DiscoverPage() {
           Real prices, real photos, live open/busy status — kept fresh by the owners themselves.
         </p>
         <div className="searchbar">
-          <input
-            className="input search-input"
-            placeholder="Search a dish or place — “kottu”, “cafe”…"
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && runSearch()}
-          />
+          <div className="search-wrap">
+            <Icon name="search" size={22} className="search-icon" />
+            <input
+              className="input search-input"
+              placeholder="Search dishes, cuisines, or restaurants…"
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && runSearch()}
+            />
+          </div>
           <button className="btn btn-primary" onClick={runSearch} disabled={loading}>
-            {loading ? '…' : 'Search'}
+            {loading ? '…' : 'Find food'}
           </button>
         </div>
 
@@ -238,13 +242,31 @@ export default function DiscoverPage() {
           {!loading && results.length === 0 && <p className="muted">No places found.</p>}
         </div>
       )}
+
+      {/* Quick discover — bento */}
+      <section style={{ marginTop: 40 }}>
+        <h2 className="h2">Quick discover</h2>
+        <div className="bento">
+          {[
+            { label: 'Local Favorites', img: 'https://images.unsplash.com/photo-1504674900247-0877df9cc836?w=800&q=80' },
+            { label: 'Sweets', img: 'https://images.unsplash.com/photo-1488477181946-6428a0291777?w=600&q=80' },
+            { label: 'Drinks', img: 'https://images.unsplash.com/photo-1544145945-f90425340c7e?w=600&q=80' },
+          ].map((t) => (
+            <div key={t.label} className="bento-tile" onClick={() => setShowFilters(true)}>
+              <img src={t.img} alt={t.label} loading="lazy" />
+              <div className="scrim" />
+              <span className="bento-label">{t.label}</span>
+            </div>
+          ))}
+        </div>
+      </section>
     </div>
   );
 }
 
 /* ---------- cards ---------- */
 
-function CardMedia({ b, overlayName = false }: { b: Card; overlayName?: boolean }) {
+function CardMedia({ b }: { b: Card }) {
   const g = cuisineGradient(b.categorySlug);
   return (
     <div
@@ -252,25 +274,17 @@ function CardMedia({ b, overlayName = false }: { b: Card; overlayName?: boolean 
       style={!b.thumbnailUrl ? ({ ['--ph-a' as string]: g.a, ['--ph-b' as string]: g.b } as React.CSSProperties) : undefined}
     >
       {b.thumbnailUrl ? (
-        <img src={b.thumbnailUrl} alt={b.name} />
+        <img src={b.thumbnailUrl} alt={b.name} loading="lazy" />
       ) : (
         <span className="ph-emoji">{cuisineEmoji(b.categorySlug)}</span>
       )}
-      <span className="badge-float">
-        <span className={`live live-${b.live}`}>{liveLabel[b.live]}</span>
+      <span className="verified-badge">
+        <Icon name="verified" size={15} fill /> Verified
       </span>
-      {b.reviewCount > 0 && (
-        <span className="rating-float">
-          <b>★</b> {b.avgRating}
+      {b.live !== 'closed' && (
+        <span className={`live-pill live-pill-${b.live}`}>
+          <span className="live-dot" /> {b.live === 'open' ? 'Open now' : 'Busy'}
         </span>
-      )}
-      {overlayName && (
-        <>
-          <div className="scrim" />
-          <div className="on-photo">
-            <div className="name">{b.name}</div>
-          </div>
-        </>
       )}
     </div>
   );
@@ -278,23 +292,28 @@ function CardMedia({ b, overlayName = false }: { b: Card; overlayName?: boolean 
 
 function RestaurantCard({ b }: { b: Card }) {
   return (
-    <a href={`/b/${b.id}`} className="card">
-      <CardMedia b={b} overlayName />
-      <div className="card-body">
-        <div className="meta">
-          <span style={{ textTransform: 'capitalize' }}>{b.categorySlug ?? 'food'}</span>
-          <span className="dot" />
-          <span className="price">{priceTier(b.priceTier)}</span>
-          <span className="dot" />
-          <span>{distance(b.distanceM)}</span>
+    <a href={`/b/${b.id}`} className="rcard">
+      <CardMedia b={b} />
+      <div className="rcard-body">
+        <div className="row between" style={{ alignItems: 'flex-start', gap: 8 }}>
+          <h3 className="rcard-title">{b.name}</h3>
           {b.reviewCount > 0 && (
-            <>
-              <span className="dot" />
-              <span>{b.reviewCount} reviews</span>
-            </>
+            <span className="star-chip">
+              <Icon name="star" size={16} fill style={{ color: 'var(--gold)' }} /> {b.avgRating}
+            </span>
           )}
         </div>
-        <span className="fresh">Fresh · updated {freshness(b.lastUpdatedAt)}</span>
+        <div className="rcard-meta">
+          <Icon name="location_on" size={16} />
+          <span>
+            {distance(b.distanceM)} · <span style={{ textTransform: 'capitalize' }}>{b.categorySlug ?? 'food'}</span> ·{' '}
+            {priceTier(b.priceTier)}
+          </span>
+        </div>
+        <div className="rcard-updated">
+          <Icon name="schedule" size={15} />
+          <span>Updated {freshness(b.lastUpdatedAt)}</span>
+        </div>
       </div>
     </a>
   );
@@ -351,16 +370,9 @@ function Rail({ title, items }: { title: string; items: Card[] }) {
       <h2 className="h2" style={{ marginBottom: 10 }}>{title}</h2>
       <div className="rail">
         {items.map((b) => (
-          <a key={b.id} href={`/b/${b.id}`} className="card rail-card">
-            <CardMedia b={b} overlayName />
-            <div className="card-body">
-              <div className="meta">
-                <span className="price">{priceTier(b.priceTier)}</span>
-                <span className="dot" />
-                <span>{distance(b.distanceM)}</span>
-              </div>
-            </div>
-          </a>
+          <div key={b.id} className="rail-card">
+            <RestaurantCard b={b} />
+          </div>
         ))}
       </div>
     </div>

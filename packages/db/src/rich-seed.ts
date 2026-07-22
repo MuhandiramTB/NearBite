@@ -17,7 +17,6 @@ const ANON = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
 const SERVICE = process.env.SUPABASE_SERVICE_ROLE_KEY!;
 if (!URL || !ANON || !SERVICE) throw new Error('Missing Supabase env');
 const admin = createClient(URL, SERVICE, { auth: { persistSession: false } });
-const BUCKET = 'business-photos';
 const PW = 'Passw0rd!x';
 
 // Retry helper — the network to the Supabase region is flaky; auth calls
@@ -61,29 +60,6 @@ async function session(email: string, role: 'admin' | 'owner' | 'consumer', name
   return { client: c, id: created.id, name };
 }
 
-/** Generate a warm food "photo" as an SVG (a real, self-contained image file). */
-function foodSvg(title: string, emoji: string, hue: number): Uint8Array {
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="800" height="500" viewBox="0 0 800 500">
-  <defs>
-    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0" stop-color="hsl(${hue},70%,55%)"/>
-      <stop offset="1" stop-color="hsl(${(hue + 30) % 360},75%,42%)"/>
-    </linearGradient>
-    <radialGradient id="v" cx="0.5" cy="0.4" r="0.8">
-      <stop offset="0" stop-color="rgba(255,255,255,0.25)"/>
-      <stop offset="1" stop-color="rgba(0,0,0,0.15)"/>
-    </radialGradient>
-  </defs>
-  <rect width="800" height="500" fill="url(#g)"/>
-  <rect width="800" height="500" fill="url(#v)"/>
-  <circle cx="400" cy="215" r="120" fill="rgba(255,255,255,0.14)"/>
-  <text x="400" y="255" font-size="130" text-anchor="middle" dominant-baseline="middle">${emoji}</text>
-  <text x="400" y="410" font-size="34" font-family="Segoe UI, sans-serif" font-weight="700"
-        fill="rgba(255,255,255,0.95)" text-anchor="middle">${title}</text>
-</svg>`;
-  return new TextEncoder().encode(svg);
-}
-
 type Listing = {
   name: string;
   cat: string;
@@ -100,7 +76,7 @@ type Listing = {
   purposes: string[];
   convenience: string[];
   menu: { name: string; price: number; veg: boolean; section: string }[];
-  photos: { title: string; emoji: string }[];
+  photos: string[]; // absolute stock photo URLs
 };
 
 const OWNERS: { email: string; name: string; listings: Listing[] }[] = [
@@ -131,8 +107,8 @@ const OWNERS: { email: string; name: string; listings: Listing[] }[] = [
           { name: 'Faluda', price: 400, veg: true, section: 'Drinks' },
         ],
         photos: [
-          { title: 'Chicken Kottu', emoji: '🍛' },
-          { title: 'Hoppers', emoji: '🥞' },
+          'https://images.unsplash.com/photo-1585032226651-759b368d7246?w=800&q=80',
+          'https://images.unsplash.com/photo-1567188040759-fb8a883dc6d8?w=800&q=80',
         ],
       },
     ],
@@ -163,8 +139,8 @@ const OWNERS: { email: string; name: string; listings: Listing[] }[] = [
           { name: 'Mango Smoothie', price: 650, veg: true, section: 'Drinks' },
         ],
         photos: [
-          { title: 'Avocado Toast', emoji: '🥑' },
-          { title: 'Flat White', emoji: '☕' },
+          'https://images.unsplash.com/photo-1525351484163-7529414344d8?w=800&q=80',
+          'https://images.unsplash.com/photo-1497935586351-b67a49e012bf?w=800&q=80',
         ],
       },
     ],
@@ -195,8 +171,8 @@ const OWNERS: { email: string; name: string; listings: Listing[] }[] = [
           { name: 'Chicken Chowmein', price: 1100, veg: false, section: 'Noodles' },
         ],
         photos: [
-          { title: 'Nasi Goreng', emoji: '🍚' },
-          { title: 'Hot Butter Cuttlefish', emoji: '🦑' },
+          'https://images.unsplash.com/photo-1512058564366-18510be2db19?w=800&q=80',
+          'https://images.unsplash.com/photo-1552611052-33e04de081de?w=800&q=80',
         ],
       },
     ],
@@ -282,19 +258,11 @@ async function main() {
         })),
       );
 
-      // upload generated SVG images + register photo rows (owner-owned path)
+      // register real stock food photos (absolute URLs pass through publicUrl)
       for (let i = 0; i < L.photos.length; i++) {
-        const p = L.photos[i]!;
-        const path = `${bizId}/${i}-${p.title.toLowerCase().replace(/\W+/g, '-')}.svg`;
-        const bytes = foodSvg(p.title, p.emoji, L.hue + i * 12);
-        const up = await admin.storage.from(BUCKET).upload(path, bytes, {
-          contentType: 'image/svg+xml',
-          upsert: true,
-        });
-        if (up.error) console.log('  upload err:', up.error.message);
         await admin.from('photos').insert({
           business_id: bizId,
-          storage_path: path,
+          storage_path: L.photos[i]!,
           kind: i === 0 ? 'food' : 'venue',
         });
       }
