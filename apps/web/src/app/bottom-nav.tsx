@@ -2,29 +2,29 @@
 
 import { usePathname } from 'next/navigation';
 import { useSession } from '@/lib/ui/use-session';
-import { Icon } from '@/lib/ui/Icon';
+import { SvgIcon, type IconName } from '@/lib/ui/SvgIcon';
 
-/** Mobile-only bottom navigation (spec §11). Hidden on desktop via CSS. */
+/** Mobile-only bottom navigation (spec §11). Unique SVG icon set, no web-font
+ *  dependency so glyphs always render. Hidden on desktop via CSS. */
 export function BottomNav() {
   const path = usePathname();
   const session = useSession();
-  const items = [
-    { href: '/', label: 'Search', icon: 'search' },
-    { href: '/favorites', label: 'Saved', icon: 'favorite' },
-    {
-      href: session.role === 'owner' || session.role === 'admin' ? '/owner' : '/signin',
-      label: session.userId ? 'Account' : 'Sign in',
-      icon: 'person',
-    },
+
+  const accountHref = session.role === 'owner' || session.role === 'admin' ? '/owner' : session.userId ? '/signin' : '/signin';
+  const items: { href: string; label: string; icon: IconName }[] = [
+    { href: '/', label: 'Discover', icon: 'discover' },
+    { href: '/favorites', label: 'Saved', icon: 'saved' },
+    { href: accountHref, label: session.userId ? 'Account' : 'Sign in', icon: 'user' },
   ];
+
   return (
     <nav className="bottom-nav">
       {items.map((it) => {
         const active = path === it.href;
         return (
           <a key={it.href} href={it.href} className={`bn-item ${active ? 'on' : ''}`}>
-            <Icon name={it.icon} size={24} fill={active} />
-            {it.label}
+            <SvgIcon name={it.icon} size={23} fill={active && it.icon === 'saved'} />
+            <span>{it.label}</span>
           </a>
         );
       })}
